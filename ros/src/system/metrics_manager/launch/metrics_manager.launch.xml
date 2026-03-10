@@ -1,11 +1,24 @@
 <launch>
-  <arg name="publish_rate_hz" default="1.0"
-       description="Metrics publish rate in Hz"/>
+  <!-- ──────────────────────────────────────────────────────────────────────
+       metrics_manager.launch.xml
+       Defaults mirror autodriver_bringup/config/system.yaml [metrics] section.
+       ────────────────────────────────────────────────────────────────────── -->
+
+  <arg name="publish_rate_hz"    default="1.0"
+       description="Metrics DiagnosticArray publish rate (Hz)"/>
+  <arg name="stall_threshold_s"  default="5.0"
+       description="Topic stall detection threshold (seconds)"/>
+  <arg name="model_names"        default="['yolo', 'lane', 'segmentation']"
+       description="List of model names whose /perception/{name}/results topics to monitor"/>
 
   <node pkg="metrics_manager"
         exec="metrics_manager_node"
         name="metrics_manager"
-        output="screen">
-    <param name="publish_rate_hz" value="$(var publish_rate_hz)"/>
+        output="screen"
+        respawn="true"
+        respawn_delay="3.0">
+    <param name="publish_rate_hz"   value="$(var publish_rate_hz)"/>
+    <param name="stall_threshold_s" value="$(var stall_threshold_s)"/>
+    <param name="model_names"       value="$(var model_names)"/>
   </node>
 </launch>
