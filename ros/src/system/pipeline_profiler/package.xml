@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pipeline_profiler</name>
+  <version>0.1.0</version>
+  <description>
+    Per-stage latency profiler for the autodriver perception pipeline.
+    Measures and publishes latency at each pipeline stage:
+    camera_capture → ipc_send → ipc_recv → scheduler → batch_build → inference → publish.
+  </description>
+  <maintainer email="damgi.dev@gmail.com">DamGi Ahn</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
