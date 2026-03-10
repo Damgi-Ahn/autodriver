@@ -1,0 +1,56 @@
+<launch>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       perception.launch.xml
+       Launches the GPU inference pipeline:
+         1. tensorrt_inference_manager — TRT inference server (IPC server)
+         2. camera_manager             — GStreamer CSI capture (IPC client)
+
+       Startup order:
+         tensorrt_inference_manager binds the IPC socket in its constructor.
+         camera_manager connects via CreateClientSocket with retries.
+         Start tensorrt_inference_manager first; camera_manager will retry
+         until the socket is ready.
+
+       Standalone usage:
+         ros2 launch autodriver_bringup perception.launch.xml
+         ros2 launch autodriver_bringup perception.launch.xml \
+             debug_stream:=true
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Config paths ──────────────────────────────────────────────────── -->
+  <arg name="cameras_yaml"
+       default="$(find-pkg-share camera_manager)/config/cameras.yaml"
+       description="cameras.yaml — per-camera hardware and calibration config"/>
+  <arg name="models_yaml"
+       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"
+       description="models.yaml — TensorRT engine paths and batch config"/>
+  <arg name="system_yaml"
+       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"
+       description="system.yaml — shared CUDA/pool/IPC parameters"/>
+
+  <!-- ── IPC ───────────────────────────────────────────────────────────── -->
+  <arg name="ipc_socket_path"
+       default="/tmp/autodriver/frames.sock"
+       description="Unix domain socket — must match between inference and camera nodes"/>
+
+  <!-- ── Feature toggles ───────────────────────────────────────────────── -->
+  <arg name="debug_stream"
+       default="false"
+       description="Enable per-camera NVJPEG CompressedImage debug topics"/>
+
+  <!-- ── 1. TensorRT inference manager ─────────────────────────────────── -->
+  <include
+    file="$(find-pkg-share tensorrt_inference_manager)/launch/inference_manager.launch.xml">
+    <arg name="models_yaml"     value="$(var models_yaml)"/>
+    <arg name="system_yaml"     value="$(var system_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+  </include>
+
+  <!-- ── 2. Camera manager ─────────────────────────────────────────────── -->
+  <include file="$(find-pkg-share camera_manager)/launch/camera_manager.launch.xml">
+    <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+    <arg name="debug_stream"    value="$(var debug_stream)"/>
+  </include>
+
+</launch>

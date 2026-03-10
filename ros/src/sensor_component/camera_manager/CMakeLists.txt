@@ -48,6 +48,38 @@ ament_target_dependencies(camera_manager_node
   sensor_msgs
 )
 
+# ── Tests ─────────────────────────────────────────────────────────────────────
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  # test_camera_config — YAML parsing logic, no hardware required
+  ament_add_gtest(test_camera_config
+    test/test_camera_config.cpp
+    src/camera_config.cpp
+  )
+  autodriver_set_compiler_options(test_camera_config)
+  target_include_directories(test_camera_config PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(test_camera_config PRIVATE yaml-cpp)
+
+  # test_camera_pipeline — pipeline string / initial state, no GStreamer device
+  ament_add_gtest(test_camera_pipeline
+    test/test_camera_pipeline.cpp
+    src/camera_pipeline.cpp
+    src/camera_config.cpp
+  )
+  autodriver_set_compiler_options(test_camera_pipeline)
+  target_include_directories(test_camera_pipeline PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(test_camera_pipeline PRIVATE
+    autodriver::ipc_unix_socket
+    PkgConfig::GST
+    NvBufSurface::NvBufSurface
+    CUDA::cudart
+    yaml-cpp)
+  ament_target_dependencies(test_camera_pipeline rclcpp sensor_msgs)
+endif()
+
 # ── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS camera_manager_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/  DESTINATION include)

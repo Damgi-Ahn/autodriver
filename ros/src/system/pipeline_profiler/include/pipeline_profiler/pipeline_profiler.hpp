@@ -6,71 +6,77 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <mutex>
 #include <string>
 
 namespace autodriver::system {
 
 // ---------------------------------------------------------------------------
-// Pipeline stages — latency is measured between consecutive stages.
+// Stage — pipeline stage IDs in temporal order.
 // ---------------------------------------------------------------------------
 enum class Stage : uint8_t {
-    CAMERA_CAPTURE = 0,  ///< Frame exits GStreamer appsink
-    IPC_SEND,            ///< DMABUF fd sent over Unix socket
-    IPC_RECV,            ///< DMABUF fd received by inference_manager
-    SCHEDULER,           ///< Frame enqueued into model queue
-    BATCH_BUILD,         ///< Batch assembled, TRT input tensor filled
-    INFERENCE,           ///< enqueueV3 + cudaStreamSynchronize complete
-    PUBLISH,             ///< ROS2 result topic published
-    _COUNT
+  CAMERA_CAPTURE = 0,  ///< Frame exits GStreamer appsink
+  IPC_SEND,            ///< DMABUF fd sent over Unix socket
+  IPC_RECV,            ///< DMABUF fd received by inference_manager
+  SCHEDULER,           ///< Frame enqueued into model queue
+  BATCH_BUILD,         ///< Batch assembled, TRT input tensor filled
+  INFERENCE,           ///< enqueueV3 + cudaStreamSynchronize complete
+  PUBLISH,             ///< ROS 2 result topic published
+  _COUNT
 };
 
 static constexpr size_t kNumStages = static_cast<size_t>(Stage::_COUNT);
 
 // ---------------------------------------------------------------------------
-// StageTimestamp — attached to each frame across the pipeline.
-// Passed by value (cheap) in FrameMeta extensions or as side-channel.
+// StageTimestamp — one per frame; ts[i] = ns when stage i completed.
+// Zero means the stage was not reached.
 // ---------------------------------------------------------------------------
 struct StageTimestamp {
-    uint64_t frame_id{0};
-    uint64_t camera_id{0};
-    std::array<uint64_t, kNumStages> ts{};  ///< nanoseconds per stage
+  uint64_t frame_id{0};
+  uint64_t camera_id{0};
+  std::array<uint64_t, kNumStages> ts{};
 };
 
 // ---------------------------------------------------------------------------
-// PipelineProfiler — ROS2 node
+// PipelineProfiler — ROS 2 node
 //
-// Collects StageTimestamps from all pipeline components via a shared
-// lock-free ring buffer, computes per-stage latency statistics, and
-// publishes them on /system/profiler at 1 Hz.
+// Records inter-stage latency statistics.
+// Call record() from any pipeline thread; it is lock-free.
+// Publishes /system/profiler (Float32MultiArray) at publish_rate_hz.
+//
+// Topic layout:
+//   data[2*i]   = avg latency gap[i] (µs), window-averaged
+//   data[2*i+1] = max latency gap[i] (µs), window-maximum
+//   where gap[i] = ts[i+1] - ts[i]  (kNumStages-1 gaps total)
+//
+// Accumulators reset every publish window (no cumulative drift).
 // ---------------------------------------------------------------------------
 class PipelineProfiler : public rclcpp::Node {
-public:
-    explicit PipelineProfiler(const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
-    ~PipelineProfiler() override = default;
+ public:
+  explicit PipelineProfiler(
+      const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
+  ~PipelineProfiler() override = default;
 
-    /// Record a completed StageTimestamp. Thread-safe, non-blocking.
-    void record(const StageTimestamp& ts);
+  /// Record a StageTimestamp. Thread-safe, wait-free.
+  void record(const StageTimestamp& ts);
 
-    /// Convenience: get current monotonic time in nanoseconds.
-    static uint64_t now_ns();
+  /// Current monotonic time in nanoseconds.
+  static uint64_t now_ns();
 
-    static const char* stage_name(Stage s);
+  /// Human-readable stage name.
+  static const char* stage_name(Stage s);
 
-private:
-    void publish_stats();
+ private:
+  void PublishStats();
 
-    // Rolling statistics per inter-stage gap
-    struct StageStat {
-        std::atomic<uint64_t> count{0};
-        std::atomic<uint64_t> sum_us{0};   ///< Microseconds
-        std::atomic<uint64_t> max_us{0};
-    };
-    // Gap[i] = ts[i+1] - ts[i]
-    std::array<StageStat, kNumStages - 1> gap_stats_;
+  struct StageStat {
+    std::atomic<uint64_t> count{0};
+    std::atomic<uint64_t> sum_us{0};
+    std::atomic<uint64_t> max_us{0};
+  };
 
-    rclcpp::TimerBase::SharedPtr                                  timer_;
-    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub_;
+  std::array<StageStat, kNumStages - 1>                         gap_stats_;
+  rclcpp::TimerBase::SharedPtr                                  timer_;
+  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr pub_;
 };
 
-} // namespace autodriver::system
+}  // namespace autodriver::system
