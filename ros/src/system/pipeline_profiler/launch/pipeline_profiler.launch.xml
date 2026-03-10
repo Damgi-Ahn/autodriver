@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="pipeline_profiler"
+        exec="pipeline_profiler_node"
+        name="pipeline_profiler"
+        output="screen"/>
+</launch>

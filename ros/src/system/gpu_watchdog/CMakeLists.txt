@@ -1,43 +1,33 @@
 cmake_minimum_required(VERSION 3.14)
 project(gpu_watchdog VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+
+include(AutodriverCompilerOptions)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 
+
 add_executable(gpu_watchdog_node
   src/gpu_watchdog_node.cpp
   src/gpu_watchdog.cpp
 )
+autodriver_set_compiler_options(gpu_watchdog_node)
 
-target_include_directories(gpu_watchdog_node
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(gpu_watchdog_node PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_compile_options(gpu_watchdog_node PRIVATE -Wall -Wextra -O2)
 
-ament_target_dependencies(gpu_watchdog_node
-  rclcpp
-  std_msgs
-  diagnostic_msgs
-)
+# gpu_watchdog reads sysfs — no extra libs needed
 
-install(TARGETS gpu_watchdog_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+ament_target_dependencies(gpu_watchdog_node rclcpp std_msgs diagnostic_msgs)
 
-install(DIRECTORY include/
-  DESTINATION include
-)
-
-install(DIRECTORY launch/
-  DESTINATION share/${PROJECT_NAME}/launch
-)
+install(TARGETS gpu_watchdog_node DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY include/  DESTINATION include)
+install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
 ament_package()
