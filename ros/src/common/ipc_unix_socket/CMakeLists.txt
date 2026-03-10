@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(ipc_unix_socket VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
+ament_auto_find_build_dependencies()
 
 # ── Library ───────────────────────────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
@@ -51,4 +52,4 @@ install(
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_package()
+ament_auto_package()

@@ -7,6 +7,7 @@
     Shared CMake modules for the autodriver ROS2 workspace.
     Provides:
       - AutodriverCompilerOptions.cmake  (shared compiler flags)
+      - FindAutodriverCUDA.cmake         (Jetson-aware CUDA detection, Autodriver::CUDA target)
       - FindNvBufSurface.cmake           (NVIDIA NvBufSurface imported target)
       - FindTensorRT.cmake               (TensorRT 10 imported targets)
 

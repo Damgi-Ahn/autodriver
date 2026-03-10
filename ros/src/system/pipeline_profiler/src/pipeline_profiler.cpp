@@ -31,16 +31,20 @@ const char* PipelineProfiler::stage_name(Stage s)
 PipelineProfiler::PipelineProfiler(const rclcpp::NodeOptions& options)
     : rclcpp::Node("pipeline_profiler", options)
 {
+  declare_parameter("publish_rate_hz", 1.0);
+  const double rate_hz = get_parameter("publish_rate_hz").as_double();
+  const auto   period  = std::chrono::duration<double>(1.0 / rate_hz);
+
   pub_ = create_publisher<std_msgs::msg::Float32MultiArray>(
       "/system/profiler", rclcpp::QoS{10});
 
   timer_ = create_wall_timer(
-      std::chrono::seconds(1),
+      std::chrono::duration_cast<std::chrono::nanoseconds>(period),
       [this] { PublishStats(); });
 
   RCLCPP_INFO(get_logger(),
-              "PipelineProfiler started — %zu inter-stage gaps tracked",
-              kNumStages - 1);
+              "PipelineProfiler started — %zu inter-stage gaps, publish=%.1f Hz",
+              kNumStages - 1, rate_hz);
 }
 
 // ---------------------------------------------------------------------------

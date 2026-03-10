@@ -1,114 +1,74 @@
 <launch>
   <!-- ══════════════════════════════════════════════════════════════════════
        autodriver.launch.xml — Full system bringup
-       
-       Starts the complete autodriver perception pipeline:
-         1. tensorrt_inference_manager  (IPC server, GPU inference)
-         2. camera_manager              (GStreamer capture, IPC client)
-         3. gpu_watchdog                (Thermal + memory + stall detection)
-         4. metrics_manager             (Pipeline metrics aggregation @ 1 Hz)
-         5. pipeline_profiler           (End-to-end latency profiling @ 1 Hz)
-       
-       Node startup order is critical:
-         tensorrt_inference_manager must bind the IPC socket BEFORE
-         camera_manager tries to connect.  Use launch delay or readiness
-         probes (not available in XML launch without a Python wrapper).
-         In practice, tensorrt_inference_manager's AcceptConnection()
-         will keep retrying, so a brief camera_manager reconnect loop
-         is sufficient.
+
+       Composes two sub-launches:
+         perception.launch.xml  — GPU inference + camera capture pipeline
+         monitoring.launch.xml  — GPU watchdog + metrics + profiler
+
+       Topic map:
+         camera_manager  ──DMABUF FD/IPC──►  tensorrt_inference_manager
+         tensorrt_inference_manager  ──►  /perception/{model}/results
+         gpu_watchdog               ──►  /system/watchdog/{status,alert}
+         metrics_manager            ──►  /system/metrics
+         pipeline_profiler          ──►  /system/profiler
 
        Usage:
          ros2 launch autodriver_bringup autodriver.launch.xml
          ros2 launch autodriver_bringup autodriver.launch.xml \
-             debug_stream:=true \
-             cameras_yaml:=/path/to/cameras.yaml
-
+             debug_stream:=true
+         ros2 launch autodriver_bringup autodriver.launch.xml \
+             watchdog_throttle_temp_c:=80.0 \
+             profiler_rate_hz:=2.0
        ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- ── Global path arguments ─────────────────────────────────────────── -->
+  <!-- ── Perception config ─────────────────────────────────────────────── -->
   <arg name="cameras_yaml"
-       default="$(find-pkg-share camera_manager)/config/cameras.yaml"
-       description="Path to cameras.yaml (sensor configuration)"/>
+       default="$(find-pkg-share camera_manager)/config/cameras.yaml"/>
   <arg name="models_yaml"
-       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"
-       description="Path to models.yaml (TRT engine configuration)"/>
+       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"/>
   <arg name="system_yaml"
-       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"
-       description="Path to system.yaml (shared system parameters)"/>
+       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"/>
   <arg name="ipc_socket_path"
-       default="/tmp/autodriver/frames.sock"
-       description="Unix domain socket for camera → inference DMABUF transfer"/>
-
-  <!-- ── Feature toggles ───────────────────────────────────────────────── -->
+       default="/tmp/autodriver/frames.sock"/>
   <arg name="debug_stream"
        default="false"
-       description="Enable per-camera NVJPEG CompressedImage debug topics"/>
+       description="Enable NVJPEG CompressedImage debug stream per camera"/>
 
-  <!-- ── Watchdog / metrics thresholds (override system.yaml defaults) ── -->
+  <!-- ── Monitoring overrides (default = system.yaml values) ───────────── -->
   <arg name="watchdog_poll_rate_hz"      default="2.0"/>
   <arg name="watchdog_stall_threshold_s" default="5.0"/>
   <arg name="watchdog_mem_warn_pct"      default="90.0"/>
   <arg name="watchdog_throttle_temp_c"   default="85.0"/>
   <arg name="metrics_rate_hz"            default="1.0"/>
-  <arg name="metrics_model_names"
-       default="['yolo', 'lane', 'segmentation']"/>
+  <arg name="metrics_model_names"        default="['yolo', 'lane', 'segmentation']"/>
+  <arg name="profiler_rate_hz"           default="1.0"/>
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       1. tensorrt_inference_manager
-          Must start first — creates the IPC socket that camera_manager
-          will connect to.
+       Perception pipeline
+       (tensorrt_inference_manager + camera_manager)
        ══════════════════════════════════════════════════════════════════════ -->
-  <include
-    file="$(find-pkg-share tensorrt_inference_manager)/launch/inference_manager.launch.xml">
+  <include file="$(find-pkg-share autodriver_bringup)/launch/perception.launch.xml">
+    <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
     <arg name="models_yaml"     value="$(var models_yaml)"/>
     <arg name="system_yaml"     value="$(var system_yaml)"/>
-    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
-  </include>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       2. camera_manager
-          IPC client — connects to tensorrt_inference_manager socket.
-          GStreamer pipelines open nvarguscamerasrc (CSI cameras on Jetson).
-       ══════════════════════════════════════════════════════════════════════ -->
-  <include
-    file="$(find-pkg-share camera_manager)/launch/camera_manager.launch.xml">
-    <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
     <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
     <arg name="debug_stream"    value="$(var debug_stream)"/>
   </include>
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       3. GPU watchdog
-          Polls /sys/devices/gpu.0/load and CUDA memory @ 2 Hz.
-          Publishes:  /system/watchdog/status  (DiagnosticArray)
-                      /system/watchdog/alert   (String, on level change)
+       Monitoring stack
+       (gpu_watchdog + metrics_manager + pipeline_profiler)
        ══════════════════════════════════════════════════════════════════════ -->
-  <include file="$(find-pkg-share gpu_watchdog)/launch/gpu_watchdog.launch.xml">
-    <arg name="poll_rate_hz"      value="$(var watchdog_poll_rate_hz)"/>
-    <arg name="stall_threshold_s" value="$(var watchdog_stall_threshold_s)"/>
-    <arg name="mem_warn_pct"      value="$(var watchdog_mem_warn_pct)"/>
-    <arg name="throttle_temp_c"   value="$(var watchdog_throttle_temp_c)"/>
+  <include file="$(find-pkg-share autodriver_bringup)/launch/monitoring.launch.xml">
+    <arg name="watchdog_poll_rate_hz"      value="$(var watchdog_poll_rate_hz)"/>
+    <arg name="watchdog_stall_threshold_s" value="$(var watchdog_stall_threshold_s)"/>
+    <arg name="watchdog_mem_warn_pct"      value="$(var watchdog_mem_warn_pct)"/>
+    <arg name="watchdog_throttle_temp_c"   value="$(var watchdog_throttle_temp_c)"/>
+    <arg name="metrics_rate_hz"            value="$(var metrics_rate_hz)"/>
+    <arg name="metrics_stall_threshold_s"  value="$(var watchdog_stall_threshold_s)"/>
+    <arg name="metrics_model_names"        value="$(var metrics_model_names)"/>
+    <arg name="profiler_rate_hz"           value="$(var profiler_rate_hz)"/>
   </include>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       4. Metrics manager
-          Subscribes to /perception/{model}/results topics @ 1 Hz.
-          Publishes:  /system/metrics  (DiagnosticArray)
-       ══════════════════════════════════════════════════════════════════════ -->
-  <include
-    file="$(find-pkg-share metrics_manager)/launch/metrics_manager.launch.xml">
-    <arg name="publish_rate_hz"   value="$(var metrics_rate_hz)"/>
-    <arg name="stall_threshold_s" value="$(var watchdog_stall_threshold_s)"/>
-    <arg name="model_names"       value="$(var metrics_model_names)"/>
-  </include>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       5. Pipeline profiler
-          Collects StageTimestamp records from all nodes.
-          Publishes:  /system/profiler  (Float32MultiArray @ 1 Hz)
-                      Layout: [avg_us, max_us] × 6 inter-stage gaps
-       ══════════════════════════════════════════════════════════════════════ -->
-  <include
-    file="$(find-pkg-share pipeline_profiler)/launch/pipeline_profiler.launch.xml"/>
 
 </launch>

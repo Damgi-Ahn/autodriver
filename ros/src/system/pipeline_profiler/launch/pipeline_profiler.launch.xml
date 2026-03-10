@@ -1,6 +1,19 @@
 <launch>
+  <!-- ──────────────────────────────────────────────────────────────────────
+       pipeline_profiler.launch.xml
+       Publishes /system/profiler (Float32MultiArray) at publish_rate_hz.
+       Layout: [avg_us, max_us] × 6 inter-stage gaps (camera_capture → publish).
+       ────────────────────────────────────────────────────────────────────── -->
+
+  <arg name="publish_rate_hz" default="1.0"
+       description="Profiler stats publish rate (Hz). Accumulators reset each window."/>
+
   <node pkg="pipeline_profiler"
         exec="pipeline_profiler_node"
         name="pipeline_profiler"
-        output="screen"/>
+        output="screen"
+        respawn="true"
+        respawn_delay="2.0">
+    <param name="publish_rate_hz" value="$(var publish_rate_hz)"/>
+  </node>
 </launch>
