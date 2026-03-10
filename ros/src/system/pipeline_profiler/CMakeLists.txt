@@ -1,14 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(pipeline_profiler VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
-
-find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(diagnostic_msgs REQUIRED)
+ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs
 
 # ---------------------------------------------------------------------------
 # Library
@@ -24,7 +21,7 @@ target_include_directories(pipeline_profiler_lib PUBLIC
 )
 
 ament_target_dependencies(pipeline_profiler_lib PUBLIC
-  rclcpp std_msgs diagnostic_msgs)
+  rclcpp std_msgs)
 
 # ---------------------------------------------------------------------------
 # Executable
@@ -52,4 +49,4 @@ install(TARGETS pipeline_profiler_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_package()
+ament_auto_package()

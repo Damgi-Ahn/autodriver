@@ -1,18 +1,14 @@
 cmake_minimum_required(VERSION 3.14)
 project(camera_manager VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)  # Injects CMAKE_MODULE_PATH
 
 include(AutodriverCompilerOptions)
-
-# ── ROS2 ──────────────────────────────────────────────────────────────────────
-find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(ipc_unix_socket REQUIRED)
+ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, ipc_unix_socket
 
 # ── System dependencies ───────────────────────────────────────────────────────
-find_package(CUDAToolkit REQUIRED)
+find_package(AutodriverCUDA REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET
   gstreamer-1.0
@@ -39,7 +35,7 @@ target_link_libraries(camera_manager_node PRIVATE
   autodriver::ipc_unix_socket
   PkgConfig::GST
   NvBufSurface::NvBufSurface
-  CUDA::cudart
+  Autodriver::CUDA
   yaml-cpp
 )
 
@@ -75,7 +71,7 @@ if(BUILD_TESTING)
     autodriver::ipc_unix_socket
     PkgConfig::GST
     NvBufSurface::NvBufSurface
-    CUDA::cudart
+    Autodriver::CUDA
     yaml-cpp)
   ament_target_dependencies(test_camera_pipeline rclcpp sensor_msgs)
 endif()
@@ -86,4 +82,4 @@ install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_package()
+ament_auto_package()

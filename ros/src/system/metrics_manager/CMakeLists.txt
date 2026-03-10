@@ -1,15 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 project(metrics_manager VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
+ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs, diagnostic_msgs
 
-find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(diagnostic_msgs REQUIRED)
-find_package(CUDAToolkit REQUIRED)
+find_package(AutodriverCUDA REQUIRED)
 
 # ---------------------------------------------------------------------------
 # Library
@@ -24,7 +22,7 @@ target_include_directories(metrics_manager_lib PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(metrics_manager_lib PUBLIC CUDA::cudart)
+target_link_libraries(metrics_manager_lib PUBLIC Autodriver::CUDA)
 
 ament_target_dependencies(metrics_manager_lib PUBLIC
   rclcpp std_msgs diagnostic_msgs)
@@ -55,4 +53,4 @@ install(TARGETS metrics_manager_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_package()
+ament_auto_package()

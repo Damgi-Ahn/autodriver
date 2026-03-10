@@ -1,17 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 project(tensorrt_inference_manager VERSION 0.1.0 LANGUAGES CXX)
 
-find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
+ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, std_msgs, ipc_unix_socket
 
-find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(ipc_unix_socket REQUIRED)
-
-find_package(CUDAToolkit REQUIRED)
+find_package(AutodriverCUDA REQUIRED)
 find_package(TensorRT REQUIRED)
 if(DEFINED TensorRT_VERSION_MAJOR AND TensorRT_VERSION_MAJOR LESS 10)
   message(FATAL_ERROR
@@ -42,7 +38,7 @@ target_link_libraries(inference_lib PUBLIC
   TensorRT::nvinfer_plugin
   TensorRT::nvonnxparser
   NvBufSurface::NvBufSurface
-  CUDA::cudart
+  Autodriver::CUDA
   yaml-cpp
 )
 
@@ -96,4 +92,4 @@ install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_package()
+ament_auto_package()
