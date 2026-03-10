@@ -1,36 +1,39 @@
 <launch>
   <!-- ─────────────────────────────────────────────────────────────────────── -->
   <!-- perception_system.launch.xml                                           -->
-  <!-- Top-level launch file for the autodriver perception pipeline.          -->
+  <!-- Top-level launch for the autodriver perception pipeline.               -->
   <!--                                                                        -->
-  <!-- Launch order (important for IPC socket readiness):                     -->
-  <!--   1. tensorrt_inference_manager  — opens IPC server socket first        -->
-  <!--   2. camera_manager             — connects to inference_manager IPC    -->
+  <!-- Node startup order (IPC socket dependency):                            -->
+  <!--   1. tensorrt_inference_manager  — binds IPC server socket             -->
+  <!--   2. camera_manager             — connects to IPC server               -->
   <!--   3. metrics_manager, pipeline_profiler, gpu_watchdog                  -->
   <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-  <!-- ── Config paths ────────────────────────────────────────────────────── -->
+  <!-- ── Config path arguments ──────────────────────────────────────────── -->
   <arg name="cameras_yaml"
-       default="$(find-pkg-share camera_manager)/config/cameras.yaml"/>
+       default="$(find-pkg-share camera_manager)/config/cameras.yaml"
+       description="cameras.yaml path"/>
   <arg name="models_yaml"
-       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"/>
+       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"
+       description="models.yaml path"/>
   <arg name="system_yaml"
-       default="/opt/autodriver/config/system.yaml"/>
+       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"
+       description="Shared system parameters YAML"/>
   <arg name="ipc_socket_path"
-       default="/tmp/autodriver/frames.sock"/>
-  <arg name="debug_stream" default="false"/>
+       default="/tmp/autodriver/frames.sock"
+       description="Unix domain socket path for DMABUF FD transport"/>
+  <arg name="debug_stream"
+       default="false"
+       description="Enable per-camera NVJPEG debug stream"/>
 
-  <!-- ── 1. Inference manager (IPC server — must bind before camera starts) -->
+  <!-- ── 1. Inference manager (must bind IPC socket before cameras start) ─ -->
   <include file="$(find-pkg-share tensorrt_inference_manager)/launch/inference_manager.launch.xml">
     <arg name="models_yaml"     value="$(var models_yaml)"/>
     <arg name="system_yaml"     value="$(var system_yaml)"/>
     <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
   </include>
 
-  <!-- ── 2. Camera manager (IPC client — delayed 2 s for socket readiness) -->
-  <!-- Note: ROS2 launch XML does not have a native timer action.            -->
-  <!-- Use the TimerAction from Python launch if sub-second precision        -->
-  <!-- matters; otherwise rely on inference_manager's accept() blocking.     -->
+  <!-- ── 2. Camera manager (IPC client — connects after inference_manager) ─ -->
   <include file="$(find-pkg-share camera_manager)/launch/camera_manager.launch.xml">
     <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
     <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>

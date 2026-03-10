@@ -1,18 +1,17 @@
 <launch>
   <!-- ───────────────────────────────────────────────────────────────────── -->
   <!-- inference_manager.launch.xml                                         -->
-  <!-- Launches tensorrt_inference_manager_node.                            -->
-  <!-- Start this BEFORE camera_manager so the IPC socket is ready.         -->
+  <!-- Launch tensorrt_inference_manager_node.                              -->
+  <!-- Start this BEFORE camera_manager — the node binds the IPC socket     -->
+  <!-- in its constructor and blocks until camera_manager connects.          -->
   <!-- ───────────────────────────────────────────────────────────────────── -->
 
   <arg name="models_yaml"
        default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"
-       description="Path to models.yaml (TensorRT engine configurations)"/>
-
+       description="TensorRT engine configuration YAML"/>
   <arg name="system_yaml"
-       default="/opt/autodriver/config/system.yaml"
-       description="Path to system.yaml (CUDA streams, pool size, etc.)"/>
-
+       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"
+       description="Shared system parameters YAML"/>
   <arg name="ipc_socket_path"
        default="/tmp/autodriver/frames.sock"
        description="Unix domain socket path (must match camera_manager)"/>
