@@ -1,0 +1,44 @@
+<launch>
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <!-- perception_system.launch.xml                                           -->
+  <!-- Top-level launch file for the autodriver perception pipeline.          -->
+  <!--                                                                        -->
+  <!-- Launch order (important for IPC socket readiness):                     -->
+  <!--   1. tensorrt_inference_manager  — opens IPC server socket first        -->
+  <!--   2. camera_manager             — connects to inference_manager IPC    -->
+  <!--   3. metrics_manager, pipeline_profiler, gpu_watchdog                  -->
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+
+  <!-- ── Config paths ────────────────────────────────────────────────────── -->
+  <arg name="cameras_yaml"
+       default="$(find-pkg-share camera_manager)/config/cameras.yaml"/>
+  <arg name="models_yaml"
+       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"/>
+  <arg name="system_yaml"
+       default="/opt/autodriver/config/system.yaml"/>
+  <arg name="ipc_socket_path"
+       default="/tmp/autodriver/frames.sock"/>
+  <arg name="debug_stream" default="false"/>
+
+  <!-- ── 1. Inference manager (IPC server — must bind before camera starts) -->
+  <include file="$(find-pkg-share tensorrt_inference_manager)/launch/inference_manager.launch.xml">
+    <arg name="models_yaml"     value="$(var models_yaml)"/>
+    <arg name="system_yaml"     value="$(var system_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+  </include>
+
+  <!-- ── 2. Camera manager (IPC client — delayed 2 s for socket readiness) -->
+  <!-- Note: ROS2 launch XML does not have a native timer action.            -->
+  <!-- Use the TimerAction from Python launch if sub-second precision        -->
+  <!-- matters; otherwise rely on inference_manager's accept() blocking.     -->
+  <include file="$(find-pkg-share camera_manager)/launch/camera_manager.launch.xml">
+    <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+    <arg name="debug_stream"    value="$(var debug_stream)"/>
+  </include>
+
+  <!-- ── 3. System monitoring ────────────────────────────────────────────── -->
+  <include file="$(find-pkg-share metrics_manager)/launch/metrics_manager.launch.xml"/>
+  <include file="$(find-pkg-share pipeline_profiler)/launch/pipeline_profiler.launch.xml"/>
+  <include file="$(find-pkg-share gpu_watchdog)/launch/gpu_watchdog.launch.xml"/>
+</launch>

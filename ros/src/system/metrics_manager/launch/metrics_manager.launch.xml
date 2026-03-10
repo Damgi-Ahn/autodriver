@@ -1,0 +1,11 @@
+<launch>
+  <arg name="publish_rate_hz" default="1.0"
+       description="Metrics publish rate in Hz"/>
+
+  <node pkg="metrics_manager"
+        exec="metrics_manager_node"
+        name="metrics_manager"
+        output="screen">
+    <param name="publish_rate_hz" value="$(var publish_rate_hz)"/>
+  </node>
+</launch>

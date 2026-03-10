@@ -1,0 +1,31 @@
+# models.yaml
+# TensorRT model configurations for autodriver inference pipeline
+# Each model has an independent batch queue in the HybridScheduler.
+
+models:
+  yolo:
+    engine: models/yolo_fp16.engine
+    batch_size: 4
+    timeout_ms: 5
+    input_tensor: images
+    output_tensor: output0
+    # Route only front-facing cameras to YOLO for object detection
+    cameras: [0, 1, 2, 3]
+
+  lane:
+    engine: models/lane_fp16.engine
+    batch_size: 2
+    timeout_ms: 5
+    input_tensor: input
+    output_tensor: output
+    # Front cameras only for lane detection
+    cameras: [0, 1, 2]
+
+  segmentation:
+    engine: models/seg_fp16.engine
+    batch_size: 4
+    timeout_ms: 8
+    input_tensor: input
+    output_tensor: output
+    # All cameras for full 360-degree segmentation (empty = all cameras)
+    cameras: []

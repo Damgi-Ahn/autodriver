@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>tensorrt_inference_manager</name>
+  <version>0.1.0</version>
+  <description>
+    Multi-model TensorRT 10 inference manager for Jetson Orin.
+    Receives DMABUF frames via Unix socket IPC, builds batches per model,
+    runs TensorRT enqueueV3 inference, publishes results via ROS2 topics.
+  </description>
+  <maintainer email="damgi.dev@gmail.com">DamGi Ahn</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>ipc_unix_socket</depend>
+
+  <!-- TensorRT, CUDA, NvBufSurface found via CMake -->
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

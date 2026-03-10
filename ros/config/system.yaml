@@ -1,0 +1,29 @@
+# system.yaml
+# Global system configuration shared across all autodriver nodes.
+
+system:
+  # Number of CUDA streams for inference pipeline overlap.
+  # Allows batch N inference to overlap with batch N+1 preprocessing.
+  cuda_streams: 8
+
+  # NvBufSurface pool size — pre-allocated GPU frame buffers.
+  # Must exceed (max_cameras × max_batch_size × pipeline_depth).
+  # 128 slots is sufficient for 12 cameras × 4 batch × 2 pipeline stages.
+  nvbufsurface_pool: 128
+
+  # IPC socket path for DMABUF FD transfer between camera_manager
+  # and tensorrt_inference_manager.
+  ipc_socket_path: /tmp/autodriver/frames.sock
+
+  # Enable NVJPEG debug image stream on all cameras (impacts CPU load slightly)
+  debug_stream: false
+
+metrics:
+  # Publish rate for /system/metrics (Hz)
+  publish_rate: 1
+
+watchdog:
+  poll_rate_hz: 2
+  stall_threshold_s: 5.0
+  mem_warn_pct: 90.0
+  throttle_temp_c: 85.0

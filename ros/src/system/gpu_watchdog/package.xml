@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gpu_watchdog</name>
+  <version>0.1.0</version>
+  <description>
+    GPU health monitor for NVIDIA Jetson Orin.
+    Uses tegrastats and sysfs to detect GPU stalls, memory exhaustion,
+    and thermal throttling. Publishes alerts via ROS2 topics.
+  </description>
+  <maintainer email="damgi.dev@gmail.com">DamGi Ahn</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
