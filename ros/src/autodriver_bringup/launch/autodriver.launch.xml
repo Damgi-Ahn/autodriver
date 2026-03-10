@@ -1,0 +1,114 @@
+<launch>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       autodriver.launch.xml — Full system bringup
+       
+       Starts the complete autodriver perception pipeline:
+         1. tensorrt_inference_manager  (IPC server, GPU inference)
+         2. camera_manager              (GStreamer capture, IPC client)
+         3. gpu_watchdog                (Thermal + memory + stall detection)
+         4. metrics_manager             (Pipeline metrics aggregation @ 1 Hz)
+         5. pipeline_profiler           (End-to-end latency profiling @ 1 Hz)
+       
+       Node startup order is critical:
+         tensorrt_inference_manager must bind the IPC socket BEFORE
+         camera_manager tries to connect.  Use launch delay or readiness
+         probes (not available in XML launch without a Python wrapper).
+         In practice, tensorrt_inference_manager's AcceptConnection()
+         will keep retrying, so a brief camera_manager reconnect loop
+         is sufficient.
+
+       Usage:
+         ros2 launch autodriver_bringup autodriver.launch.xml
+         ros2 launch autodriver_bringup autodriver.launch.xml \
+             debug_stream:=true \
+             cameras_yaml:=/path/to/cameras.yaml
+
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Global path arguments ─────────────────────────────────────────── -->
+  <arg name="cameras_yaml"
+       default="$(find-pkg-share camera_manager)/config/cameras.yaml"
+       description="Path to cameras.yaml (sensor configuration)"/>
+  <arg name="models_yaml"
+       default="$(find-pkg-share tensorrt_inference_manager)/config/models.yaml"
+       description="Path to models.yaml (TRT engine configuration)"/>
+  <arg name="system_yaml"
+       default="$(find-pkg-share autodriver_bringup)/config/system.yaml"
+       description="Path to system.yaml (shared system parameters)"/>
+  <arg name="ipc_socket_path"
+       default="/tmp/autodriver/frames.sock"
+       description="Unix domain socket for camera → inference DMABUF transfer"/>
+
+  <!-- ── Feature toggles ───────────────────────────────────────────────── -->
+  <arg name="debug_stream"
+       default="false"
+       description="Enable per-camera NVJPEG CompressedImage debug topics"/>
+
+  <!-- ── Watchdog / metrics thresholds (override system.yaml defaults) ── -->
+  <arg name="watchdog_poll_rate_hz"      default="2.0"/>
+  <arg name="watchdog_stall_threshold_s" default="5.0"/>
+  <arg name="watchdog_mem_warn_pct"      default="90.0"/>
+  <arg name="watchdog_throttle_temp_c"   default="85.0"/>
+  <arg name="metrics_rate_hz"            default="1.0"/>
+  <arg name="metrics_model_names"
+       default="['yolo', 'lane', 'segmentation']"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       1. tensorrt_inference_manager
+          Must start first — creates the IPC socket that camera_manager
+          will connect to.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <include
+    file="$(find-pkg-share tensorrt_inference_manager)/launch/inference_manager.launch.xml">
+    <arg name="models_yaml"     value="$(var models_yaml)"/>
+    <arg name="system_yaml"     value="$(var system_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+  </include>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       2. camera_manager
+          IPC client — connects to tensorrt_inference_manager socket.
+          GStreamer pipelines open nvarguscamerasrc (CSI cameras on Jetson).
+       ══════════════════════════════════════════════════════════════════════ -->
+  <include
+    file="$(find-pkg-share camera_manager)/launch/camera_manager.launch.xml">
+    <arg name="cameras_yaml"    value="$(var cameras_yaml)"/>
+    <arg name="ipc_socket_path" value="$(var ipc_socket_path)"/>
+    <arg name="debug_stream"    value="$(var debug_stream)"/>
+  </include>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       3. GPU watchdog
+          Polls /sys/devices/gpu.0/load and CUDA memory @ 2 Hz.
+          Publishes:  /system/watchdog/status  (DiagnosticArray)
+                      /system/watchdog/alert   (String, on level change)
+       ══════════════════════════════════════════════════════════════════════ -->
+  <include file="$(find-pkg-share gpu_watchdog)/launch/gpu_watchdog.launch.xml">
+    <arg name="poll_rate_hz"      value="$(var watchdog_poll_rate_hz)"/>
+    <arg name="stall_threshold_s" value="$(var watchdog_stall_threshold_s)"/>
+    <arg name="mem_warn_pct"      value="$(var watchdog_mem_warn_pct)"/>
+    <arg name="throttle_temp_c"   value="$(var watchdog_throttle_temp_c)"/>
+  </include>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       4. Metrics manager
+          Subscribes to /perception/{model}/results topics @ 1 Hz.
+          Publishes:  /system/metrics  (DiagnosticArray)
+       ══════════════════════════════════════════════════════════════════════ -->
+  <include
+    file="$(find-pkg-share metrics_manager)/launch/metrics_manager.launch.xml">
+    <arg name="publish_rate_hz"   value="$(var metrics_rate_hz)"/>
+    <arg name="stall_threshold_s" value="$(var watchdog_stall_threshold_s)"/>
+    <arg name="model_names"       value="$(var metrics_model_names)"/>
+  </include>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       5. Pipeline profiler
+          Collects StageTimestamp records from all nodes.
+          Publishes:  /system/profiler  (Float32MultiArray @ 1 Hz)
+                      Layout: [avg_us, max_us] × 6 inter-stage gaps
+       ══════════════════════════════════════════════════════════════════════ -->
+  <include
+    file="$(find-pkg-share pipeline_profiler)/launch/pipeline_profiler.launch.xml"/>
+
+</launch>

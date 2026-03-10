@@ -1,6 +1,8 @@
 #include "tensorrt_inference_manager/inference_manager.hpp"
 
 #include <yaml-cpp/yaml.h>
+
+#include <filesystem>
 #include <stdexcept>
 
 namespace autodriver::inference {
@@ -12,187 +14,251 @@ namespace autodriver::inference {
 InferenceManager::InferenceManager(const rclcpp::NodeOptions& options)
     : rclcpp::Node("tensorrt_inference_manager", options)
 {
-    declare_parameter("models_yaml",     "config/models.yaml");
-    declare_parameter("system_yaml",     "config/system.yaml");
-    declare_parameter("ipc_socket_path", "/tmp/autodriver/frames.sock");
+  declare_parameter("models_yaml",
+                    "share/tensorrt_inference_manager/config/models.yaml");
+  declare_parameter("system_yaml",
+                    "share/tensorrt_inference_manager/config/system.yaml");
+  declare_parameter("ipc_socket_path", "/tmp/autodriver/frames.sock");
 
-    ipc_socket_path_ = get_parameter("ipc_socket_path").as_string();
+  ipc_socket_path_ = get_parameter("ipc_socket_path").as_string();
 
-    load_configs();
-    init_cuda_streams();
-    init_nvbuf_pool();
-    init_model_runners();
-    init_scheduler();
-    connect_ipc();
+  LoadConfigs();
+  InitCudaStreams();
+  InitNvBufPool();
+  InitModelRunners();
+  InitScheduler();
+  BindIpcServer();
 
-    RCLCPP_INFO(get_logger(), "InferenceManager ready — %zu model(s)",
-                model_runners_.size());
+  // AcceptAndReceive blocks until camera_manager connects — run in background.
+  init_thread_ = std::thread([this] { AcceptAndReceive(); });
+
+  RCLCPP_INFO(get_logger(),
+              "InferenceManager ready — %zu model(s), listening on %s",
+              model_runners_.size(), ipc_socket_path_.c_str());
 }
 
 InferenceManager::~InferenceManager()
 {
-    shutdown();
+  Shutdown();
 }
 
 // ---------------------------------------------------------------------------
 // Initialisation
 // ---------------------------------------------------------------------------
 
-void InferenceManager::load_configs()
+void InferenceManager::LoadConfigs()
 {
-    // ── system.yaml ───────────────────────────────────────────────────────
-    const auto sys_yaml = get_parameter("system_yaml").as_string();
-    try {
-        auto root           = YAML::LoadFile(sys_yaml);
-        num_cuda_streams_   = root["system"]["cuda_streams"].as<uint32_t>(8);
-        nvbuf_pool_size_    = root["system"]["nvbufsurface_pool"].as<uint32_t>(128);
-    } catch (...) {}
+  namespace fs = std::filesystem;
 
-    // ── models.yaml ───────────────────────────────────────────────────────
-    const auto models_yaml = get_parameter("models_yaml").as_string();
-    auto root = YAML::LoadFile(models_yaml);
+  // ── system.yaml ──────────────────────────────────────────────────────────
+  const std::string sys_yaml = get_parameter("system_yaml").as_string();
+  try {
+    auto root          = YAML::LoadFile(sys_yaml);
+    num_cuda_streams_  = root["system"]["cuda_streams"].as<uint32_t>(8);
+    nvbuf_pool_size_   = root["system"]["nvbufsurface_pool"].as<uint32_t>(128);
+  } catch (const std::exception& e) {
+    RCLCPP_WARN(get_logger(), "system.yaml not loaded (%s), using defaults", e.what());
+  }
 
-    for (auto it = root["models"].begin(); it != root["models"].end(); ++it) {
-        ModelConfig cfg;
-        cfg.name         = it->first.as<std::string>();
-        auto& node       = it->second;
-        cfg.engine_path  = node["engine"].as<std::string>();
-        cfg.batch_size   = node["batch_size"].as<uint32_t>(4);
-        cfg.timeout_ms   = node["timeout_ms"].as<uint32_t>(5);
+  // ── models.yaml ──────────────────────────────────────────────────────────
+  const std::string models_yaml = get_parameter("models_yaml").as_string();
+  const fs::path    yaml_dir    = fs::path(models_yaml).parent_path();
 
-        if (node["input_tensor"])  cfg.input_tensor_name  = node["input_tensor"].as<std::string>();
-        if (node["output_tensor"]) cfg.output_tensor_name = node["output_tensor"].as<std::string>();
-        if (node["cameras"])
-            cfg.subscribed_cameras = node["cameras"].as<std::vector<uint32_t>>();
+  auto root = YAML::LoadFile(models_yaml);
 
-        model_configs_.push_back(cfg);
-    }
+  for (auto it = root["models"].begin(); it != root["models"].end(); ++it) {
+    ModelConfig cfg;
+    cfg.name = it->first.as<std::string>();
+    auto& node = it->second;
+
+    // Resolve engine path relative to models.yaml directory if not absolute.
+    fs::path ep = node["engine"].as<std::string>();
+    cfg.engine_path = ep.is_absolute() ? ep : (yaml_dir / ep);
+
+    cfg.batch_size  = node["batch_size"].as<uint32_t>(4);
+    cfg.timeout_ms  = node["timeout_ms"].as<uint32_t>(5);
+
+    if (node["input_tensor"])
+      cfg.input_tensor_name  = node["input_tensor"].as<std::string>();
+    if (node["output_tensor"])
+      cfg.output_tensor_name = node["output_tensor"].as<std::string>();
+    if (node["cameras"])
+      cfg.subscribed_cameras = node["cameras"].as<std::vector<uint32_t>>();
+
+    model_configs_.push_back(cfg);
+    RCLCPP_INFO(get_logger(), "  Model '%s' → %s (batch=%u, timeout=%ums)",
+                cfg.name.c_str(), cfg.engine_path.c_str(),
+                cfg.batch_size, cfg.timeout_ms);
+  }
+
+  if (model_configs_.empty())
+    throw std::runtime_error("No models found in " + models_yaml);
 }
 
-void InferenceManager::init_cuda_streams()
+void InferenceManager::InitCudaStreams()
 {
-    cuda_streams_.resize(num_cuda_streams_);
-    for (auto& s : cuda_streams_)
-        if (cudaStreamCreate(&s) != cudaSuccess)
-            throw std::runtime_error("cudaStreamCreate failed");
+  cuda_streams_.resize(num_cuda_streams_);
+  for (auto& s : cuda_streams_) {
+    if (cudaStreamCreate(&s) != cudaSuccess)
+      throw std::runtime_error("cudaStreamCreate failed");
+  }
+  RCLCPP_INFO(get_logger(), "Created %u CUDA streams", num_cuda_streams_);
 }
 
-void InferenceManager::init_nvbuf_pool()
+void InferenceManager::InitNvBufPool()
 {
-    nvbuf_pool_ = std::make_unique<NvBufSurfacePool>(nvbuf_pool_size_);
-    if (!nvbuf_pool_->init())
-        throw std::runtime_error("NvBufSurfacePool init failed");
+  nvbuf_pool_ = std::make_unique<NvBufSurfacePool>(nvbuf_pool_size_);
+  if (!nvbuf_pool_->Init())
+    throw std::runtime_error("NvBufSurfacePool::Init() failed");
+  RCLCPP_INFO(get_logger(), "NvBufSurfacePool: %u slots", nvbuf_pool_size_);
 }
 
-void InferenceManager::init_model_runners()
+void InferenceManager::InitModelRunners()
 {
-    for (size_t i = 0; i < model_configs_.size(); ++i) {
-        const auto& cfg = model_configs_[i];
-        cudaStream_t stream = cuda_streams_[i % num_cuda_streams_];
+  for (size_t i = 0; i < model_configs_.size(); ++i) {
+    const auto& cfg    = model_configs_[i];
+    cudaStream_t stream = cuda_streams_[i % num_cuda_streams_];
 
-        auto runner = std::make_unique<ModelRunner>(cfg, *nvbuf_pool_, stream);
-        if (!runner->init())
-            RCLCPP_WARN(get_logger(), "ModelRunner '%s' init failed", cfg.name.c_str());
+    auto runner = std::make_unique<ModelRunner>(cfg, *nvbuf_pool_, stream);
+    runner->SetResultCallback(
+        [this](InferenceResult r) { OnInferenceResult(std::move(r)); });
 
-        runner->set_result_callback(
-            [this](InferenceResult r){ on_inference_result(std::move(r)); });
+    if (!runner->Init())
+      RCLCPP_WARN(get_logger(),
+                  "ModelRunner '%s' init failed (engine not found?)",
+                  cfg.name.c_str());
 
-        model_runners_[cfg.name] = std::move(runner);
+    model_runners_[cfg.name] = std::move(runner);
 
-        // ROS2 result publisher per model
-        result_pubs_[cfg.name] = create_publisher<std_msgs::msg::String>(
-            "/perception/" + cfg.name + "/results", 10);
-    }
+    result_pubs_[cfg.name] = create_publisher<std_msgs::msg::String>(
+        "/perception/" + cfg.name + "/results", rclcpp::QoS{10});
+  }
 }
 
-void InferenceManager::init_scheduler()
+void InferenceManager::InitScheduler()
 {
-    scheduler_ = std::make_unique<HybridScheduler>(*nvbuf_pool_);
+  scheduler_ = std::make_unique<HybridScheduler>(*nvbuf_pool_);
 
-    for (const auto& cfg : model_configs_) {
-        ModelQueueConfig qcfg;
-        qcfg.model_name          = cfg.name;
-        qcfg.batch_size          = cfg.batch_size;
-        qcfg.timeout_ms          = cfg.timeout_ms;
-        qcfg.subscribed_cameras  = cfg.subscribed_cameras;
-        scheduler_->add_model_queue(qcfg);
-    }
+  for (const auto& cfg : model_configs_) {
+    ModelQueueConfig qcfg;
+    qcfg.model_name         = cfg.name;
+    qcfg.batch_size         = cfg.batch_size;
+    qcfg.timeout_ms         = cfg.timeout_ms;
+    qcfg.subscribed_cameras = cfg.subscribed_cameras;
+    scheduler_->AddModelQueue(qcfg);
+  }
 
-    scheduler_->set_batch_ready_callback(
-        [this](const std::string& model, std::vector<QueuedFrame> frames) {
-            auto it = model_runners_.find(model);
-            if (it != model_runners_.end())
-                it->second->run_batch(std::move(frames));
-        });
+  scheduler_->SetBatchReadyCallback(
+      [this](const std::string& model, std::vector<QueuedFrame> frames) {
+        auto it = model_runners_.find(model);
+        if (it != model_runners_.end())
+          it->second->RunBatch(std::move(frames));
+      });
 
-    scheduler_->start();
+  scheduler_->Start();
 }
 
-void InferenceManager::connect_ipc()
+void InferenceManager::BindIpcServer()
 {
-    ipc_fd_ = ipc::create_client_socket(ipc_socket_path_);
-    if (ipc_fd_ < 0)
-        throw std::runtime_error("IPC connect failed: " + ipc_socket_path_);
-
-    ipc::set_socket_buffer_size(ipc_fd_, 4 * 1024 * 1024);
-
-    ipc_running_.store(true);
-    ipc_thread_ = std::thread([this]{ ipc_receive_loop(); });
-    RCLCPP_INFO(get_logger(), "IPC connected to %s", ipc_socket_path_.c_str());
+  // CreateServerSocket binds + listens but does NOT block on accept.
+  server_fd_ = ipc::CreateServerSocket(ipc_socket_path_);
+  if (server_fd_ < 0)
+    throw std::runtime_error("CreateServerSocket failed: " + ipc_socket_path_);
+  RCLCPP_INFO(get_logger(), "IPC socket bound at %s, awaiting camera_manager",
+              ipc_socket_path_.c_str());
 }
 
 // ---------------------------------------------------------------------------
-// IPC receive loop
+// IPC — accept + receive loop (runs in init_thread_)
 // ---------------------------------------------------------------------------
 
-void InferenceManager::ipc_receive_loop()
+void InferenceManager::AcceptAndReceive()
 {
-    while (ipc_running_.load()) {
-        int dmabuf_fd = -1;
-        ipc::FrameMeta meta{};
+  peer_fd_ = ipc::AcceptConnection(server_fd_);
+  if (peer_fd_ < 0) {
+    if (ipc_running_.load())   // unexpected
+      RCLCPP_ERROR(get_logger(), "AcceptConnection failed");
+    return;
+  }
+  ipc::SetSocketBufferSize(peer_fd_, 24 * 1024 * 1024);
+  RCLCPP_INFO(get_logger(), "camera_manager connected (fd=%d)", peer_fd_);
 
-        if (!ipc::recv_fd(ipc_fd_, &dmabuf_fd, &meta)) {
-            if (ipc_running_.load())
-                RCLCPP_WARN(get_logger(), "IPC recv failed — retrying");
-            continue;
-        }
+  ipc_running_.store(true);
+  IpcReceiveLoop();
+}
 
-        scheduler_->submit_frame(dmabuf_fd, meta);
+void InferenceManager::IpcReceiveLoop()
+{
+  while (ipc_running_.load()) {
+    int            dmabuf_fd = -1;
+    ipc::FrameMeta meta{};
+
+    const ipc::IpcStatus status = ipc::RecvFd(peer_fd_, &dmabuf_fd, &meta);
+
+    if (status == ipc::IpcStatus::kPeerClosed) {
+      RCLCPP_INFO(get_logger(), "camera_manager disconnected");
+      break;
     }
+    if (status != ipc::IpcStatus::kOk) {
+      if (ipc_running_.load())
+        RCLCPP_WARN(get_logger(), "RecvFd error — retrying");
+      continue;
+    }
+
+    scheduler_->SubmitFrame(dmabuf_fd, meta);
+  }
+  ipc_running_.store(false);
 }
 
 // ---------------------------------------------------------------------------
 // Result handling
 // ---------------------------------------------------------------------------
 
-void InferenceManager::on_inference_result(InferenceResult result)
+void InferenceManager::OnInferenceResult(InferenceResult result)
 {
-    // TODO(Stage 5/7): decode output_data and publish typed messages
-    auto it = result_pubs_.find(result.model_name);
-    if (it == result_pubs_.end()) return;
+  PublishResult(result);
 
-    const double latency_ms =
-        (result.inference_end_ns - result.inference_start_ns) / 1e6;
+  RCLCPP_DEBUG(get_logger(),
+               "[%s] batch=%zu latency=%.2f ms",
+               result.model_name.c_str(),
+               result.source_frames.size(),
+               result.LatencyMs());
+}
 
-    std_msgs::msg::String msg;
-    msg.data = result.model_name + " latency=" + std::to_string(latency_ms) + "ms";
-    it->second->publish(msg);
+void InferenceManager::PublishResult(const InferenceResult& result)
+{
+  auto it = result_pubs_.find(result.model_name);
+  if (it == result_pubs_.end()) return;
+
+  // Structured string payload (replace with typed msgs once custom .msg defined)
+  std_msgs::msg::String msg;
+  msg.data =
+      "{\"model\":\"" + result.model_name +
+      "\",\"frames\":" + std::to_string(result.source_frames.size()) +
+      ",\"latency_ms\":" + std::to_string(result.LatencyMs()) +
+      ",\"output_floats\":" + std::to_string(result.output_data.size()) + "}";
+  it->second->publish(msg);
 }
 
 // ---------------------------------------------------------------------------
 // Shutdown
 // ---------------------------------------------------------------------------
 
-void InferenceManager::shutdown()
+void InferenceManager::Shutdown()
 {
-    ipc_running_.store(false);
-    if (ipc_fd_ >= 0) { ::close(ipc_fd_); ipc_fd_ = -1; }
-    if (ipc_thread_.joinable()) ipc_thread_.join();
+  ipc_running_.store(false);
 
-    if (scheduler_) scheduler_->stop();
+  // Unblock IpcReceiveLoop by closing the peer fd.
+  if (peer_fd_ >= 0) { ::close(peer_fd_);   peer_fd_   = -1; }
+  // Unblock AcceptAndReceive (if still waiting for camera_manager).
+  if (server_fd_ >= 0) { ::close(server_fd_); server_fd_ = -1; }
 
-    for (auto& s : cuda_streams_) cudaStreamDestroy(s);
-    cuda_streams_.clear();
+  if (init_thread_.joinable()) init_thread_.join();
+
+  if (scheduler_) scheduler_->Stop();
+
+  for (auto& s : cuda_streams_) cudaStreamDestroy(s);
+  cuda_streams_.clear();
 }
 
-} // namespace autodriver::inference
+}  // namespace autodriver::inference

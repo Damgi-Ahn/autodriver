@@ -1,13 +1,24 @@
 <launch>
-  <arg name="poll_rate_hz"      default="2.0"/>
-  <arg name="stall_threshold_s" default="5.0"/>
-  <arg name="mem_warn_pct"      default="90.0"/>
-  <arg name="throttle_temp_c"   default="85.0"/>
+  <!-- ──────────────────────────────────────────────────────────────────────
+       gpu_watchdog.launch.xml
+       Defaults mirror autodriver_bringup/config/system.yaml [watchdog] section.
+       ────────────────────────────────────────────────────────────────────── -->
+
+  <arg name="poll_rate_hz"      default="2.0"
+       description="GPU health poll frequency (Hz)"/>
+  <arg name="stall_threshold_s" default="5.0"
+       description="Seconds of zero GPU load before stall alert"/>
+  <arg name="mem_warn_pct"      default="90.0"
+       description="GPU memory usage % at which WARN is triggered"/>
+  <arg name="throttle_temp_c"   default="85.0"
+       description="GPU temperature (°C) at which WARN is triggered"/>
 
   <node pkg="gpu_watchdog"
         exec="gpu_watchdog_node"
         name="gpu_watchdog"
-        output="screen">
+        output="screen"
+        respawn="true"
+        respawn_delay="2.0">
     <param name="poll_rate_hz"      value="$(var poll_rate_hz)"/>
     <param name="stall_threshold_s" value="$(var stall_threshold_s)"/>
     <param name="mem_warn_pct"      value="$(var mem_warn_pct)"/>
