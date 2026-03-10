@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(metrics_manager VERSION 0.1.0 LANGUAGES CXX)
 
-list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+find_package(ament_cmake REQUIRED)
+find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
 
-find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
@@ -22,7 +22,6 @@ target_include_directories(metrics_manager_node PRIVATE
 )
 
 target_link_libraries(metrics_manager_node PRIVATE CUDA::cudart)
-
 
 ament_target_dependencies(metrics_manager_node rclcpp std_msgs diagnostic_msgs)
 

@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(pipeline_profiler VERSION 0.1.0 LANGUAGES CXX)
 
-list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+find_package(ament_cmake REQUIRED)
+find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
 
-find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
@@ -20,7 +20,6 @@ autodriver_set_compiler_options(pipeline_profiler_node)
 target_include_directories(pipeline_profiler_node PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-
 
 
 

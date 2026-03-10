@@ -1,95 +1,104 @@
 # cameras.yaml
-# Multi-camera configuration for autodriver perception system
-# Supports up to 12 cameras on NVIDIA Jetson Orin
+# Multi-camera configuration for autodriver perception system (Jetson Orin Orin)
+# Up to 12 MIPI CSI cameras via nvarguscamerasrc.
+#
+# sensor_id: nvarguscamerasrc sensor-id= value (0-indexed CSI port)
+# gst_source: optional full GStreamer source element override.
+#   If set, sensor_id is ignored.  Useful for USB cameras or simulation:
+#     gst_source: "v4l2src device=/dev/video0"
+#     gst_source: "videotestsrc pattern=smpte"
+#
+# calibration.file: path relative to THIS yaml file's directory.
 
 cameras:
   - id: 0
-    name: front
-    device: /dev/video0
+    name: front_center
+    sensor_id: 0
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: HIGH
     calibration:
       enabled: true
-      file: config/calibration/front_camera.yaml
+      file: calibration/front_center.yaml
 
   - id: 1
     name: front_left
-    device: /dev/video1
+    sensor_id: 1
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: HIGH
     calibration:
       enabled: true
-      file: config/calibration/front_left_camera.yaml
+      file: calibration/front_left.yaml
 
   - id: 2
     name: front_right
-    device: /dev/video2
+    sensor_id: 2
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: HIGH
     calibration:
       enabled: true
-      file: config/calibration/front_right_camera.yaml
+      file: calibration/front_right.yaml
 
   - id: 3
-    name: rear
-    device: /dev/video3
+    name: rear_center
+    sensor_id: 3
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: HIGH
     calibration:
       enabled: true
-      file: config/calibration/rear_camera.yaml
+      file: calibration/rear_center.yaml
 
   - id: 4
     name: rear_left
-    device: /dev/video4
+    sensor_id: 4
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: NORMAL
     calibration:
       enabled: false
 
   - id: 5
     name: rear_right
-    device: /dev/video5
+    sensor_id: 5
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: NORMAL
     calibration:
       enabled: false
 
   - id: 6
-    name: left
-    device: /dev/video6
+    name: side_left
+    sensor_id: 6
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: NORMAL
     calibration:
       enabled: false
 
   - id: 7
-    name: right
-    device: /dev/video7
+    name: side_right
+    sensor_id: 7
     fps: 30
-    resolution: [1920, 1080]
-    pixel_format: UYVY
+    width: 1920
+    height: 1080
     priority: NORMAL
     calibration:
       enabled: false
 
 # Frame drop policy
-# High priority cameras always run at full fps.
-# Normal priority cameras are rate-limited to conserve IPC bandwidth.
+# High-priority cameras always transmit at full fps.
+# Normal-priority cameras are rate-limited to [min_fps, max_fps] to
+# conserve IPC socket bandwidth when inference falls behind.
 frame_drop_policy:
   high_priority_cameras: [0, 1, 2, 3]
   normal_priority_min_fps: 10

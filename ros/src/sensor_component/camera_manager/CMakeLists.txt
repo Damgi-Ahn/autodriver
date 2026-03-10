@@ -1,34 +1,28 @@
 cmake_minimum_required(VERSION 3.14)
 project(camera_manager VERSION 0.1.0 LANGUAGES CXX)
 
-list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+find_package(ament_cmake REQUIRED)
+find_package(autodriver_cmake REQUIRED)  # Injects CMAKE_MODULE_PATH
 
 include(AutodriverCompilerOptions)
 
 # ── ROS2 ──────────────────────────────────────────────────────────────────────
-find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(ipc_unix_socket REQUIRED)
 
-# ── CUDA ──────────────────────────────────────────────────────────────────────
+# ── System dependencies ───────────────────────────────────────────────────────
 find_package(CUDAToolkit REQUIRED)
-
-# ── GStreamer (via pkg-config) ────────────────────────────────────────────────
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET
   gstreamer-1.0
   gstreamer-app-1.0
   gstreamer-video-1.0
 )
-
-# ── yaml-cpp ──────────────────────────────────────────────────────────────────
 find_package(yaml-cpp REQUIRED)
-
-# ── NvBufSurface (custom Find module) ─────────────────────────────────────────
 find_package(NvBufSurface REQUIRED)
 
-# ── Executable ───────────────────────────────────────────────────────────────
+# ── Executable ────────────────────────────────────────────────────────────────
 add_executable(camera_manager_node
   src/camera_manager_node.cpp
   src/camera_manager.cpp
@@ -55,9 +49,7 @@ ament_target_dependencies(camera_manager_node
 )
 
 # ── Install ───────────────────────────────────────────────────────────────────
-install(TARGETS camera_manager_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+install(TARGETS camera_manager_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)

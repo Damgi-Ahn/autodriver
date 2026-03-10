@@ -1,21 +1,19 @@
 <launch>
   <!-- ───────────────────────────────────────────────────────────────── -->
   <!-- camera_manager.launch.xml                                         -->
-  <!-- Launches the camera_manager_node with configurable YAML paths     -->
-  <!-- and IPC socket address.                                           -->
+  <!-- Launches camera_manager_node.                                     -->
+  <!-- Start AFTER tensorrt_inference_manager (IPC server dependency).   -->
   <!-- ───────────────────────────────────────────────────────────────── -->
 
   <arg name="cameras_yaml"
        default="$(find-pkg-share camera_manager)/config/cameras.yaml"
        description="Path to cameras.yaml configuration file"/>
-
   <arg name="ipc_socket_path"
        default="/tmp/autodriver/frames.sock"
-       description="Unix domain socket path for DMABUF FD transport"/>
-
+       description="Unix socket path — must match tensorrt_inference_manager"/>
   <arg name="debug_stream"
        default="false"
-       description="Enable NVJPEG compressed debug image stream"/>
+       description="Enable per-camera NVJPEG CompressedImage stream"/>
 
   <node pkg="camera_manager"
         exec="camera_manager_node"

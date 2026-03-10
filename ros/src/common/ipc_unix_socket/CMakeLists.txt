@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(ipc_unix_socket VERSION 0.1.0 LANGUAGES CXX)
 
-# Prepend the workspace-level cmake module directory so shared Find* modules
-# and compiler-option helpers are resolved before any system paths.
-list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+find_package(ament_cmake REQUIRED)
+find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
-
-find_package(ament_cmake REQUIRED)
 
 # ── Library ───────────────────────────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED

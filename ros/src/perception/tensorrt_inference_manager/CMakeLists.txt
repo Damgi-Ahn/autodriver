@@ -1,35 +1,25 @@
 cmake_minimum_required(VERSION 3.14)
 project(tensorrt_inference_manager VERSION 0.1.0 LANGUAGES CXX)
 
-list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake")
+find_package(ament_cmake REQUIRED)
+find_package(autodriver_cmake REQUIRED)
 
 include(AutodriverCompilerOptions)
 
-# ── ROS2 ──────────────────────────────────────────────────────────────────────
-find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(ipc_unix_socket REQUIRED)
 
-# ── CUDA ──────────────────────────────────────────────────────────────────────
 find_package(CUDAToolkit REQUIRED)
-
-# ── TensorRT 10 (custom Find module) ──────────────────────────────────────────
 find_package(TensorRT REQUIRED)
-# Enforce TensorRT 10 minimum (enqueueV3 API)
 if(DEFINED TensorRT_VERSION_MAJOR AND TensorRT_VERSION_MAJOR LESS 10)
   message(FATAL_ERROR
-    "TensorRT 10+ required for enqueueV3 API. Found: ${TensorRT_VERSION}")
+    "TensorRT 10+ required (enqueueV3 API). Found: ${TensorRT_VERSION}")
 endif()
-
-# ── NvBufSurface ──────────────────────────────────────────────────────────────
 find_package(NvBufSurface REQUIRED)
-
-# ── yaml-cpp ──────────────────────────────────────────────────────────────────
 find_package(yaml-cpp REQUIRED)
 
-# ── Executable ────────────────────────────────────────────────────────────────
 add_executable(tensorrt_inference_manager_node
   src/inference_manager_node.cpp
   src/inference_manager.cpp
@@ -59,10 +49,7 @@ ament_target_dependencies(tensorrt_inference_manager_node
   std_msgs
 )
 
-# ── Install ───────────────────────────────────────────────────────────────────
-install(TARGETS tensorrt_inference_manager_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+install(TARGETS tensorrt_inference_manager_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)

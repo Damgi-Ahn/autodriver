@@ -1,107 +1,136 @@
 #pragma once
 
 #include "camera_config.hpp"
+#include <ipc_unix_socket/ipc_unix_socket.hpp>
 
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
 #include <atomic>
 #include <functional>
-#include <memory>
 #include <string>
 #include <thread>
-
-struct NvBufSurface;  // forward-declare to avoid pulling in full nvbufsurface.h
 
 namespace autodriver::camera {
 
 // ---------------------------------------------------------------------------
-// Callback type invoked from the appsink new-sample handler.
-// `dmabuf_fd`  : exported DMABUF fd (caller must close after use)
-// `meta`       : filled frame metadata
+// FrameCallback — called from GStreamer appsink thread on every captured frame.
+//
+// Parameters match ipc::FrameMeta so the caller can forward directly.
+// `dmabuf_fd` ownership stays with CameraPipeline — do NOT close it.
+// The callback runs inline; keep it fast (typically one SendFd call).
 // ---------------------------------------------------------------------------
-using FrameCallback = std::function<void(int dmabuf_fd,
-                                         uint64_t timestamp,
-                                         uint32_t camera_id,
-                                         uint32_t width,
-                                         uint32_t height,
-                                         uint32_t format)>;
+using FrameCallback = std::function<void(
+    int     dmabuf_fd,
+    uint64_t timestamp,
+    uint32_t camera_id,
+    uint32_t width,
+    uint32_t height,
+    uint32_t format)>;
 
 // ---------------------------------------------------------------------------
-// Single-camera GStreamer NVMM pipeline.
+// DebugFrameCallback — called from the debug appsink thread with JPEG data.
+// `data` is valid only for the duration of the callback.
+// ---------------------------------------------------------------------------
+using DebugFrameCallback = std::function<void(
+    uint32_t       camera_id,
+    const uint8_t* data,
+    size_t         size,
+    uint64_t       timestamp)>;
+
+// ---------------------------------------------------------------------------
+// CameraPipeline
 //
-// Lifecycle:
-//   CameraPipeline p{config};
-//   p.set_frame_callback(cb);
-//   p.start();           // spawns GStreamer thread
-//   ...
-//   p.stop();            // signals EOS and joins thread
+// Manages one GStreamer pipeline for one CSI/USB camera on Jetson Orin.
 //
-// Automatic restart:
-//   On pipeline error the thread calls restart() internally up to
-//   max_restart_attempts times before giving up.
+// Pipeline topology (debug stream disabled):
+//   nvarguscamerasrc sensor-id=N  [or custom gst_source]
+//     → capsfilter (NVMM NV12 @ WxH fps/1)
+//     → appsink name=inference_sink  ← FrameCallback
+//
+// Pipeline topology (debug stream enabled):
+//   nvarguscamerasrc sensor-id=N
+//     → capsfilter (NVMM NV12)
+//     → tee name=t
+//   t. → queue(2, leaky=downstream) → appsink name=inference_sink
+//   t. → queue(1, leaky=downstream) → nvjpegenc → appsink name=debug_sink
+//
+// Lifecycle (not thread-safe):
+//   pipeline.Start()   // spawns pipeline_thread_ + optional bus_thread_
+//   ...                // FrameCallback invoked from streaming thread
+//   pipeline.Stop()    // EOS → joins threads → null state
+//
+// Automatic restart (from bus_thread_):
+//   On GST_MESSAGE_ERROR: rebuild pipeline and restart up to kMaxRestarts.
+//   If all attempts exhausted: marks healthy=false, stops.
 // ---------------------------------------------------------------------------
 class CameraPipeline {
-public:
-    static constexpr int kMaxRestartAttempts = 5;
-    static constexpr int kRestartDelayMs     = 500;
+ public:
+  static constexpr int kMaxRestarts    = 5;
+  static constexpr int kRestartDelayMs = 500;
 
-    explicit CameraPipeline(const CameraConfig& config);
-    ~CameraPipeline();
+  explicit CameraPipeline(const CameraSpec& spec);
+  ~CameraPipeline();
 
-    // Non-copyable, non-movable (owns GStreamer resources)
-    CameraPipeline(const CameraPipeline&)            = delete;
-    CameraPipeline& operator=(const CameraPipeline&) = delete;
+  CameraPipeline(const CameraPipeline&)            = delete;
+  CameraPipeline& operator=(const CameraPipeline&) = delete;
 
-    void set_frame_callback(FrameCallback cb);
+  void SetFrameCallback(FrameCallback cb);
+  void SetDebugFrameCallback(DebugFrameCallback cb);
+  void SetDebugStreamEnabled(bool enabled);
 
-    /// Start the GStreamer pipeline in a dedicated thread.
-    bool start();
+  /// Build GStreamer pipeline and start streaming.
+  /// Returns false if the pipeline cannot be created.
+  [[nodiscard]] bool Start() noexcept;
 
-    /// Signal EOS, wait for thread to join. Safe to call from any thread.
-    void stop();
+  /// Send EOS and wait for all threads to exit.
+  void Stop() noexcept;
 
-    /// Returns false if the pipeline has failed permanently.
-    bool is_healthy() const { return healthy_.load(std::memory_order_relaxed); }
+  [[nodiscard]] bool     IsHealthy()      const noexcept;
+  [[nodiscard]] uint32_t camera_id()      const noexcept { return spec_.id; }
+  [[nodiscard]] const std::string& name() const noexcept { return spec_.name; }
 
-    uint32_t camera_id() const { return config_.id; }
-    const std::string& name() const { return config_.name; }
+  [[nodiscard]] uint64_t frames_captured() const noexcept;
+  [[nodiscard]] uint64_t frames_dropped()  const noexcept;
 
-    // Stats (updated from appsink callback, read from metrics thread)
-    uint64_t frames_captured() const { return frames_captured_.load(); }
-    uint64_t frames_dropped()  const { return frames_dropped_.load();  }
+ private:
+  // Pipeline construction
+  [[nodiscard]] bool        BuildPipeline()  noexcept;
+  void                      DestroyPipeline() noexcept;
+  [[nodiscard]] std::string BuildPipelineString() const noexcept;
 
-private:
-    // GStreamer pipeline construction
-    bool build_pipeline();
-    void destroy_pipeline();
-    void run_loop();           ///< Executed inside pipeline_thread_
+  // Bus monitoring thread — handles ERROR / EOS / WARNING messages.
+  void RunBusLoop() noexcept;
 
-    // appsink callbacks (inference branch)
-    static GstFlowReturn on_inference_sample(GstAppSink* sink, gpointer user_data);
-    GstFlowReturn handle_inference_sample(GstAppSink* sink);
+  // appsink callbacks — called from GStreamer streaming thread.
+  static GstFlowReturn OnInferenceSample(GstAppSink* sink,
+                                          gpointer   user_data) noexcept;
+  GstFlowReturn HandleInferenceSample(GstAppSink* sink) noexcept;
 
-    // appsink callbacks (debug branch — NVJPEG compressed image)
-    static GstFlowReturn on_debug_sample(GstAppSink* sink, gpointer user_data);
-    GstFlowReturn handle_debug_sample(GstAppSink* sink);
+  static GstFlowReturn OnDebugSample(GstAppSink* sink,
+                                      gpointer   user_data) noexcept;
+  GstFlowReturn HandleDebugSample(GstAppSink* sink) noexcept;
 
-    // Restart logic
-    bool restart();
+  // Restart (called from bus thread on error).
+  [[nodiscard]] bool Restart() noexcept;
 
-    CameraConfig    config_;
-    FrameCallback   frame_callback_;
+  // ── Data members ──────────────────────────────────────────────────────────
+  CameraSpec           spec_;
+  FrameCallback        frame_callback_;
+  DebugFrameCallback   debug_frame_callback_;
+  bool                 debug_stream_enabled_{false};
 
-    GstElement*     pipeline_{nullptr};
-    GstElement*     inference_appsink_{nullptr};
-    GstElement*     debug_appsink_{nullptr};
+  GstElement* pipeline_{nullptr};
+  GstElement* inference_appsink_{nullptr};
+  GstElement* debug_appsink_{nullptr};
 
-    std::thread          pipeline_thread_;
-    std::atomic<bool>    running_{false};
-    std::atomic<bool>    healthy_{true};
-    int                  restart_count_{0};
+  std::thread      bus_thread_;
+  std::atomic<bool> running_{false};
+  std::atomic<bool> healthy_{true};
+  int               restart_count_{0};
 
-    std::atomic<uint64_t> frames_captured_{0};
-    std::atomic<uint64_t> frames_dropped_{0};
+  std::atomic<uint64_t> frames_captured_{0};
+  std::atomic<uint64_t> frames_dropped_{0};
 };
 
-} // namespace autodriver::camera
+}  // namespace autodriver::camera

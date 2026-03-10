@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>autodriver_cmake</name>
+  <version>0.1.0</version>
+  <description>
+    Shared CMake modules for the autodriver ROS2 workspace.
+    Provides:
+      - AutodriverCompilerOptions.cmake  (shared compiler flags)
+      - FindNvBufSurface.cmake           (NVIDIA NvBufSurface imported target)
+      - FindTensorRT.cmake               (TensorRT 10 imported targets)
+
+    After find_package(autodriver_cmake REQUIRED), all modules are available
+    via CMAKE_MODULE_PATH without additional configuration.
+  </description>
+  <maintainer email="damgi.dev@gmail.com">DamGi Ahn</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
