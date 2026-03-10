@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -18,68 +19,70 @@
 namespace autodriver::inference {
 
 // ---------------------------------------------------------------------------
-// InferenceManager — ROS2 node
+// InferenceManager — ROS 2 lifecycle node for multi-model TRT inference.
 //
-// Responsibilities:
-//   1. Load models.yaml + system.yaml
-//   2. Initialise NvBufSurfacePool
-//   3. Initialise CUDA streams
-//   4. Construct one ModelRunner per model
-//   5. Construct HybridScheduler, register model queues
-//   6. Connect to camera_manager via Unix socket
-//   7. Run IPC receiver loop (dedicated thread)
-//   8. Forward batches from HybridScheduler to ModelRunner
-//   9. Publish inference results via ROS2 topics
+// IPC role: SERVER (binds Unix socket; camera_manager connects as client).
+//
+// Startup sequence:
+//   1. LoadConfigs()     — parse models.yaml + system.yaml
+//   2. InitCudaStreams() — create N CUDA streams
+//   3. InitNvBufPool()   — pre-allocate NvBufSurface pool
+//   4. InitModelRunners()— deserialise TRT engines, alloc device buffers
+//   5. InitScheduler()   — register queues, start per-model drain threads
+//   6. BindIpcServer()   — CreateServerSocket (non-blocking bind+listen)
+//   7. init_thread_      — AcceptConnection (blocks until camera_manager)
+//                        → then runs IpcReceiveLoop
+//
+// Shutdown sequence (destructor):
+//   - ipc_running_ = false; close peer_fd_ → IpcReceiveLoop exits
+//   - Join init_thread_
+//   - scheduler_->Stop()
+//   - Destroy CUDA streams; CloseServerSocket
 // ---------------------------------------------------------------------------
 class InferenceManager : public rclcpp::Node {
-public:
-    explicit InferenceManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
-    ~InferenceManager() override;
+ public:
+  explicit InferenceManager(
+      const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
+  ~InferenceManager() override;
 
-private:
-    // ── Initialisation ──────────────────────────────────────────────────────
-    void load_configs();
-    void init_cuda_streams();
-    void init_nvbuf_pool();
-    void init_model_runners();
-    void init_scheduler();
-    void connect_ipc();
+ private:
+  void LoadConfigs();
+  void InitCudaStreams();
+  void InitNvBufPool();
+  void InitModelRunners();
+  void InitScheduler();
+  void BindIpcServer();
 
-    // ── IPC receiver loop ────────────────────────────────────────────────────
-    void ipc_receive_loop();
+  void AcceptAndReceive();   ///< Runs in init_thread_
+  void IpcReceiveLoop();     ///< Called by AcceptAndReceive after accept
 
-    // ── Inference result handling ─────────────────────────────────────────────
-    void on_inference_result(InferenceResult result);
+  void OnInferenceResult(InferenceResult result);
+  void PublishResult(const InferenceResult& result);
 
-    // ── ROS2 publish helpers ─────────────────────────────────────────────────
-    void publish_detections(const InferenceResult& result);
-    void publish_lanes(const InferenceResult& result);
-    void publish_segmentation(const InferenceResult& result);
+  void Shutdown();
 
-    // ── Shutdown ─────────────────────────────────────────────────────────────
-    void shutdown();
+  // ── Config ───────────────────────────────────────────────────────────────
+  std::vector<ModelConfig> model_configs_;
+  uint32_t                 num_cuda_streams_{8};
+  uint32_t                 nvbuf_pool_size_{128};
+  std::string              ipc_socket_path_{"/tmp/autodriver/frames.sock"};
 
-    // ── Config ───────────────────────────────────────────────────────────────
-    std::vector<ModelConfig> model_configs_;
-    uint32_t                 num_cuda_streams_{8};
-    uint32_t                 nvbuf_pool_size_{128};
-    std::string              ipc_socket_path_{"/tmp/autodriver/frames.sock"};
+  // ── GPU resources ────────────────────────────────────────────────────────
+  std::vector<cudaStream_t>                        cuda_streams_;
+  std::unique_ptr<NvBufSurfacePool>                nvbuf_pool_;
+  std::unordered_map<std::string,
+                     std::unique_ptr<ModelRunner>> model_runners_;
+  std::unique_ptr<HybridScheduler>                 scheduler_;
 
-    // ── GPU resources ────────────────────────────────────────────────────────
-    std::vector<cudaStream_t>                              cuda_streams_;
-    std::unique_ptr<NvBufSurfacePool>                      nvbuf_pool_;
-    std::unordered_map<std::string,
-                       std::unique_ptr<ModelRunner>>       model_runners_;
-    std::unique_ptr<HybridScheduler>                       scheduler_;
+  // ── IPC ──────────────────────────────────────────────────────────────────
+  int                server_fd_{-1};   ///< Bound listening fd
+  int                peer_fd_{-1};     ///< Accepted camera_manager fd
+  std::atomic<bool>  ipc_running_{false};
+  std::thread        init_thread_;
 
-    // ── IPC ──────────────────────────────────────────────────────────────────
-    int           ipc_fd_{-1};
-    std::thread   ipc_thread_;
-    std::atomic<bool> ipc_running_{false};
-
-    // ── ROS2 publishers (per model) ───────────────────────────────────────────
-    std::unordered_map<std::string,
-        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> result_pubs_;
+  // ── ROS 2 publishers ─────────────────────────────────────────────────────
+  std::unordered_map<std::string,
+      rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> result_pubs_;
 };
 
-} // namespace autodriver::inference
+}  // namespace autodriver::inference

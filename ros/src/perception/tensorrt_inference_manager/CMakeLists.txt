@@ -20,20 +20,23 @@ endif()
 find_package(NvBufSurface REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
-add_executable(tensorrt_inference_manager_node
-  src/inference_manager_node.cpp
+# ---------------------------------------------------------------------------
+# Inference library (shared between main node and tests)
+# ---------------------------------------------------------------------------
+add_library(inference_lib STATIC
   src/inference_manager.cpp
   src/model_runner.cpp
   src/nvbuf_pool.cpp
   src/scheduler.cpp
 )
-autodriver_set_compiler_options(tensorrt_inference_manager_node)
+autodriver_set_compiler_options(inference_lib)
 
-target_include_directories(tensorrt_inference_manager_node PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(inference_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(tensorrt_inference_manager_node PRIVATE
+target_link_libraries(inference_lib PUBLIC
   autodriver::ipc_unix_socket
   TensorRT::nvinfer
   TensorRT::nvinfer_plugin
@@ -43,13 +46,52 @@ target_link_libraries(tensorrt_inference_manager_node PRIVATE
   yaml-cpp
 )
 
-ament_target_dependencies(tensorrt_inference_manager_node
+ament_target_dependencies(inference_lib PUBLIC
   rclcpp
   sensor_msgs
   std_msgs
 )
 
-install(TARGETS tensorrt_inference_manager_node DESTINATION lib/${PROJECT_NAME})
+# ---------------------------------------------------------------------------
+# Main node executable
+# ---------------------------------------------------------------------------
+add_executable(tensorrt_inference_manager_node
+  src/inference_manager_node.cpp
+)
+autodriver_set_compiler_options(tensorrt_inference_manager_node)
+
+target_link_libraries(tensorrt_inference_manager_node PRIVATE inference_lib)
+
+ament_target_dependencies(tensorrt_inference_manager_node
+  rclcpp
+)
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  # ── test_scheduler ────────────────────────────────────────────────────────
+  ament_add_gtest(test_scheduler
+    test/test_scheduler.cpp
+  )
+  autodriver_set_compiler_options(test_scheduler)
+  target_link_libraries(test_scheduler PRIVATE inference_lib)
+
+  # ── test_nvbuf_pool ───────────────────────────────────────────────────────
+  ament_add_gtest(test_nvbuf_pool
+    test/test_nvbuf_pool.cpp
+  )
+  autodriver_set_compiler_options(test_nvbuf_pool)
+  target_link_libraries(test_nvbuf_pool PRIVATE inference_lib)
+endif()
+
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+install(TARGETS tensorrt_inference_manager_node
+  DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
