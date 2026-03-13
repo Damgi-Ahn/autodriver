@@ -1,6 +1,7 @@
 #ifndef HYBRID_LOCALIZATION__HYBRID_LOCALIZATION_NODE_HPP_
 #define HYBRID_LOCALIZATION__HYBRID_LOCALIZATION_NODE_HPP_
 
+#include <atomic>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -25,6 +26,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <skyautonet_msgs/msg/gphdt.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <tier4_map_msgs/msg/map_projector_info.hpp>
 
@@ -50,6 +52,24 @@
 
 namespace hybrid_localization
 {
+
+// ---------------------------------------------------------------------------
+// LocalizationState: 모듈 동작 상태 (상위 시스템 fault 보고용)
+//
+//  UNINITIALIZED → INITIALIZING → OPERATING
+//                                     ↕  (GNSS 불량 5초 이상)
+//                                 DEGRADED
+//                                     ↕  (ESKF non-finite 발생 시)
+//                                  FAILED → INITIALIZING
+// ---------------------------------------------------------------------------
+enum class LocalizationState : uint8_t
+{
+  UNINITIALIZED = 0,  // 미활성화 또는 IMU 캘리브 대기
+  INITIALIZING  = 1,  // 첫 GNSS/Heading 대기 중
+  OPERATING     = 2,  // 정상 측위 출력 중
+  DEGRADED      = 3,  // GNSS 불량/timeout — IMU 단독 추측항법
+  FAILED        = 4,  // ESKF non-finite 강제 리셋
+};
 
 class HybridLocalizationNode : public rclcpp::Node
 {
@@ -97,6 +117,7 @@ private:
   rclcpp::Publisher<autoware_vehicle_msgs::msg::VelocityReport>::SharedPtr
     gnss_velocity_pub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr keyframe_path_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_pub_;
 
   // ---- Subscribers --------------------------------------------------------
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
@@ -136,12 +157,12 @@ private:
   static constexpr double IMU_CALIBRATION_DURATION_SEC = 30.0;
 
   // ---- Counters & timestamps ----------------------------------------------
-  size_t imu_count_{0};
-  size_t gnss_count_{0};
-  size_t gnss_vel_count_{0};
-  size_t velocity_count_{0};
-  size_t steering_count_{0};
-  bool map_projector_received_{false};
+  std::atomic<size_t> imu_count_{0};
+  std::atomic<size_t> gnss_count_{0};
+  std::atomic<size_t> gnss_vel_count_{0};
+  std::atomic<size_t> velocity_count_{0};
+  std::atomic<size_t> steering_count_{0};
+  std::atomic<bool> map_projector_received_{false};
 
   rclcpp::Time last_imu_stamp_;
   rclcpp::Time last_gnss_stamp_;
@@ -159,7 +180,7 @@ private:
   autoware_vehicle_msgs::msg::SteeringReport::SharedPtr latest_steering_;
   skyautonet_msgs::msg::Gphdt::SharedPtr latest_heading_;
   double latest_heading_yaw_rad_{0.0};
-  bool heading_received_{false};
+  std::atomic<bool> heading_received_{false};
 
   rclcpp::Time eskf_init_stamp_{0, 0, RCL_ROS_TIME};
   static constexpr double k_heading_rate_gate_init_grace_sec_{5.0};
@@ -179,8 +200,18 @@ private:
   EskfDiagnosticsPublisher diag_builder_;
 
   // ---- Activation control -------------------------------------------------
-  bool is_activated_{true};
+  std::atomic<bool> is_activated_{true};
   bool use_external_initialpose_{false};
+
+  // ---- Localization state machine -----------------------------------------
+  // state_mutex_ 와 무관하게 publish timer에서 read-only 접근 가능 (atomic)
+  std::atomic<LocalizationState> localization_state_{LocalizationState::UNINITIALIZED};
+  // GNSS good 마지막 수신 시각 (gnss_recover_mutex_ 보호)
+  rclcpp::Time last_gnss_good_stamp_{0, 0, RCL_ROS_TIME};
+
+  // 상태 전이 + 상위 시스템 fault 보고 (state_pub_ 발행)
+  // 반드시 publish_timer_callback() 에서만 호출 (timer_cb_group_)
+  void transition_state(LocalizationState new_state);
 
   // ---- Helper methods -----------------------------------------------------
   void reset_imu_dt_stats();
@@ -269,10 +300,14 @@ private:
   EskfCorrector eskf_corrector_;
 
   // ---- FGO Stage 5: 진단 카운터 + 경로 시각화 ----------------------------
-  size_t fgo_correction_count_{0};   // 총 FGO 보정 적용 횟수
-  size_t fgo_keyframe_count_{0};     // 총 생성된 키프레임 수
+  std::atomic<size_t> fgo_correction_count_{0};   // 총 FGO 보정 적용 횟수
+  std::atomic<size_t> fgo_keyframe_count_{0};     // 총 생성된 키프레임 수
   // 키프레임 경로 (state_mutex_ 보호, maybe_push_keyframe 에서 갱신)
   nav_msgs::msg::Path keyframe_path_;
+
+  // ---- Adaptive FGO window ------------------------------------------------
+  // state_mutex_ 로 보호
+  int current_fgo_window_size_{0};  // 0 = 초기화 전 (params 로드 후 설정)
 
   // 키프레임 생성 후 내부 헬퍼
   void maybe_push_keyframe(

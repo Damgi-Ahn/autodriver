@@ -299,6 +299,11 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
   fgo_backend.gnss_min_status_for_vel = node.declare_parameter(
     "fgo.backend.gnss_min_status_for_vel", fgo_backend.gnss_min_status_for_vel);
 
+  fgo_backend.adaptive_window_enable = node.declare_parameter(
+    "fgo.backend.adaptive_window_enable", fgo_backend.adaptive_window_enable);
+  fgo_backend.adaptive_window_max = node.declare_parameter(
+    "fgo.backend.adaptive_window_max", fgo_backend.adaptive_window_max);
+
   // --- FGO Stage 4+5: EskfCorrector 파라미터 ---
   fgo_corrector.enabled = node.declare_parameter(
     "fgo.corrector.enabled", fgo_corrector.enabled);
@@ -307,6 +312,14 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
   fgo_corrector.max_reintegration_window_sec = node.declare_parameter(
     "fgo.corrector.max_reintegration_window_sec",
     fgo_corrector.max_reintegration_window_sec);
+
+  // ImuBuffer 크기 파라미터화
+  imu_buffer_max_samples = node.declare_parameter(
+    "fgo.corrector.imu_buffer_max_samples", imu_buffer_max_samples);
+
+  // 상태 머신: GNSS 불량 → DEGRADED 전이 타임아웃
+  gnss_degraded_timeout_sec = node.declare_parameter(
+    "state.gnss_degraded_timeout_sec", gnss_degraded_timeout_sec);
 }
 
 } // namespace hybrid_localization

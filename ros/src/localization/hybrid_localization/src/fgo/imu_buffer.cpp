@@ -34,7 +34,13 @@ void ImuBuffer::push(const ImuMeasurement & meas)
   buffer_.push_back(meas);
   while (buffer_.size() > max_size_) {
     buffer_.pop_front();
+    overflow_count_.fetch_add(1u, std::memory_order_relaxed);
   }
+}
+
+size_t ImuBuffer::take_overflow_count()
+{
+  return overflow_count_.exchange(0u, std::memory_order_relaxed);
 }
 
 std::vector<ImuMeasurement> ImuBuffer::get_since(double stamp_sec) const

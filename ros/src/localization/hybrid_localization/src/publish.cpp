@@ -10,6 +10,39 @@
 namespace hybrid_localization
 {
 
+namespace
+{
+const char * state_to_string(LocalizationState s)
+{
+  switch (s) {
+    case LocalizationState::UNINITIALIZED: return "UNINITIALIZED";
+    case LocalizationState::INITIALIZING:  return "INITIALIZING";
+    case LocalizationState::OPERATING:     return "OPERATING";
+    case LocalizationState::DEGRADED:      return "DEGRADED";
+    case LocalizationState::FAILED:        return "FAILED";
+    default:                               return "UNKNOWN";
+  }
+}
+} // namespace
+
+void HybridLocalizationNode::transition_state(LocalizationState new_state)
+{
+  const LocalizationState prev = localization_state_.exchange(new_state);
+  if (prev == new_state) {
+    return;
+  }
+  RCLCPP_WARN(
+    this->get_logger(),
+    "[LocalizationState] %s → %s",
+    state_to_string(prev), state_to_string(new_state));
+
+  if (state_pub_) {
+    std_msgs::msg::String msg;
+    msg.data = state_to_string(new_state);
+    state_pub_->publish(msg);
+  }
+}
+
 // NOTE: 출력/진단은 고정 주기의 타이머에서 수행하여 시간 일관성을 유지한다.
 void HybridLocalizationNode::publish_timer_callback()
 {
@@ -34,6 +67,7 @@ void HybridLocalizationNode::publish_timer_callback()
       RCLCPP_ERROR_THROTTLE(
         this->get_logger(),
         *this->get_clock(), 2000, "ESKF state became non-finite. Resetting filter.");
+      transition_state(LocalizationState::FAILED);
       eskf_.reset();
       last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
       last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
@@ -49,6 +83,58 @@ void HybridLocalizationNode::publish_timer_callback()
     have_omega = have_last_omega_base_;
   }
   heading_received = heading_received_;
+
+  // ---- 상태 머신 평가 (publish timer 에서만 호출) --------------------------
+  {
+    const rclcpp::Time now = this->now();
+
+    // GNSS 불량 여부: last_gnss_good_stamp_ 가 timeout 이상 갱신 안 된 경우
+    bool gnss_degraded = true;
+    {
+      std::scoped_lock<std::mutex> lock(gnss_recover_mutex_);
+      const double good_sec = last_gnss_good_stamp_.seconds();
+      if (good_sec > 0.0) {
+        gnss_degraded =
+          (now - last_gnss_good_stamp_).seconds() >
+          node_params_.gnss_degraded_timeout_sec;
+      }
+    }
+
+    LocalizationState new_state;
+    if (!activated) {
+      new_state = LocalizationState::UNINITIALIZED;
+    } else if (!eskf_initialized) {
+      new_state = LocalizationState::INITIALIZING;
+    } else if (gnss_degraded) {
+      new_state = LocalizationState::DEGRADED;
+    } else {
+      new_state = LocalizationState::OPERATING;
+    }
+    transition_state(new_state);
+
+    // 적응형 FGO 윈도우: DEGRADED 시 확장, 그 외 기본값으로 복귀
+    if (node_params_.fgo_backend.adaptive_window_enable) {
+      const int target_size = gnss_degraded ?
+        node_params_.fgo_backend.adaptive_window_max :
+        node_params_.fgo_backend.window_size;
+      {
+        std::scoped_lock<std::mutex> lock(state_mutex_);
+        current_fgo_window_size_ = target_size;
+      }
+    }
+  }
+
+  // ---- ImuBuffer 오버플로우 경고 ------------------------------------------
+  {
+    const size_t overflow = imu_buffer_.take_overflow_count();
+    if (overflow > 0) {
+      RCLCPP_WARN_THROTTLE(
+        this->get_logger(), *this->get_clock(), 5000,
+        "ImuBuffer overflow: %zu samples dropped (max_size=%zu). "
+        "Consider increasing fgo.corrector.imu_buffer_max_samples.",
+        overflow, imu_buffer_.max_size());
+    }
+  }
 
   const bool publish_ready =
     activated && eskf_initialized && heading_received;
@@ -398,6 +484,24 @@ void HybridLocalizationNode::publish_timer_callback()
     diag_input.has_fgo_stats = true;
     diag_input.fgo_keyframe_count = fgo_keyframe_count_;
     diag_input.fgo_correction_count = fgo_correction_count_;
+
+    // 상태 머신 → 진단 레벨 매핑
+    switch (localization_state_.load()) {
+      case LocalizationState::OPERATING:
+        diag_input.diag_level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+        break;
+      case LocalizationState::DEGRADED:
+        diag_input.diag_level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+        break;
+      case LocalizationState::FAILED:
+        diag_input.diag_level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+        break;
+      case LocalizationState::INITIALIZING:
+      case LocalizationState::UNINITIALIZED:
+      default:
+        diag_input.diag_level = diagnostic_msgs::msg::DiagnosticStatus::STALE;
+        break;
+    }
 
     const auto diag_array = diag_builder_.build(now, diag_input);
     diag_pub_->publish(diag_array);

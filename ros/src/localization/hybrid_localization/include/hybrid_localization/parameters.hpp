@@ -250,6 +250,12 @@ struct HybridLocalizationNodeParams
   // FGO Stage 4+5: EskfCorrector
   EskfCorrector::Params fgo_corrector{};
 
+  // ImuBuffer 최대 샘플 수 (200Hz×2s=400 기본값)
+  int imu_buffer_max_samples{400};
+
+  // GNSS 불량 → DEGRADED 상태 전이 타임아웃 [s]
+  double gnss_degraded_timeout_sec{5.0};
+
   // 캘리브레이션 관련
   bool init_imu_calibration{false};
   std::string calibration_file_path{};

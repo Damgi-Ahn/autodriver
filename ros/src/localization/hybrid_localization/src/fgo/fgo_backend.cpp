@@ -53,6 +53,16 @@ static NominalState gtsam_to_nominal(
 }
 
 // ---------------------------------------------------------------------------
+// set_window_size()
+// ---------------------------------------------------------------------------
+void FgoBackend::set_window_size(int n)
+{
+  const int lo = 1;
+  const int hi = params_.adaptive_window_enable ? params_.adaptive_window_max
+                                                : params_.window_size;
+  params_.window_size = std::max(lo, std::min(n, hi));
+}
+
 // initialize()
 // ---------------------------------------------------------------------------
 void FgoBackend::initialize(
