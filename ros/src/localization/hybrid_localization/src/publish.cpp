@@ -399,6 +399,10 @@ void HybridLocalizationNode::publish_timer_callback()
       diag_input.steering_delay_sec = (now - m_last_steering_stamp).seconds();
     }
 
+    diag_input.has_fgo_stats = true;
+    diag_input.fgo_keyframe_count = m_fgo_keyframe_count_;
+    diag_input.fgo_correction_count = m_fgo_correction_count_;
+
     const auto diag_array = m_diag_builder.build(now, diag_input);
     m_diag_pub->publish(diag_array);
   }

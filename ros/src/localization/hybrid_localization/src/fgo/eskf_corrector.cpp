@@ -16,6 +16,11 @@ int EskfCorrector::apply(
   // Step 1: ESKF 명목 상태를 FGO 최적화 결과로 교체
   eskf.set_nominal_state(result.state);
 
+  // Step 1b: FGO 주변 공분산을 ESKF P 에 주입 (활성화 시)
+  if (params_.inject_covariance) {
+    eskf.set_covariance(result.P);
+  }
+
   // Step 2: keyframe 이후 IMU 샘플 수집
   const auto imu_since = imu_buffer.get_since(kf_stamp_sec);
 

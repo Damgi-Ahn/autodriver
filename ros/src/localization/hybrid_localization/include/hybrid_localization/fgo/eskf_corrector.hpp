@@ -38,6 +38,10 @@ public:
 
     // FGO 보정 활성화 여부
     bool enabled{true};
+
+    // true 이면 FGO 주변 공분산을 ESKF P 에도 주입.
+    // false 이면 P는 유지하고 명목 상태만 교체.
+    bool inject_covariance{true};
   };
 
   EskfCorrector() = default;

@@ -255,10 +255,35 @@ FgoBackend::OptimizationResult FgoBackend::extract_result(uint64_t idx) const
     result.keyframe_index = idx;
     result.valid = true;
 
-    // 공분산 추출 (15×15: [δθ, δp, δv, δb_a, δb_g])
-    // GTSAM 순서: Pose3 = [rot(3), pos(3)], Vector3 = vel(3), Bias = [accel(3), gyro(3)]
-    // 필요 시 확장 (현재는 zero P 반환)
-    result.P = Eigen::Matrix<double, 15, 15>::Zero();
+    // ---- 공분산 추출 (15×15) ------------------------------------------------
+    // GTSAM 변수 접선 공간 순서:
+    //   Pose3   [6×6]: [rotation_tangent(3), translation_tangent(3)]
+    //   Vector3 [3×3]: velocity(3)
+    //   Bias    [6×6]: [accel_bias(3), gyro_bias(3)]
+    //
+    // ESKF P15 순서:
+    //   [0:3]   pos, [3:6]  vel, [6:9]  att,
+    //   [9:12]  b_g, [12:15] b_a
+    //
+    // 대각 블록만 추출 (교차 항은 보수적으로 0 유지).
+    // 슬라이딩 윈도우 내 활성 변수만 marginalCovariance 가능.
+    const auto P_pose = isam2_.marginalCovariance(x_sym(idx));  // 6×6
+    const auto P_vel  = isam2_.marginalCovariance(v_sym(idx));  // 3×3
+    const auto P_bias = isam2_.marginalCovariance(b_sym(idx));  // 6×6
+
+    Eigen::Matrix<double, 15, 15> P15 = Eigen::Matrix<double, 15, 15>::Zero();
+    P15.block<3, 3>(0, 0) = P_pose.block<3, 3>(3, 3);   // pos ← Pose3[3:6, 3:6]
+    P15.block<3, 3>(3, 3) = P_vel;                        // vel
+    P15.block<3, 3>(6, 6) = P_pose.block<3, 3>(0, 0);   // att ← Pose3[0:3, 0:3]
+    P15.block<3, 3>(9, 9) = P_bias.block<3, 3>(3, 3);   // b_g ← Bias[3:6, 3:6]
+    P15.block<3, 3>(12, 12) = P_bias.block<3, 3>(0, 0); // b_a ← Bias[0:3, 0:3]
+
+    // 수치 안전: NaN/inf 또는 비양정 대각이면 zero 반환
+    if (P15.allFinite() && P15.diagonal().minCoeff() >= 0.0) {
+      result.P = P15;
+    } else {
+      result.P = Eigen::Matrix<double, 15, 15>::Zero();
+    }
   } catch (const std::exception & e) {
     result.valid = false;
   }
@@ -296,10 +321,12 @@ FgoBackend::OptimizationResult FgoBackend::update(
   add_nhc_factor(idx);
 
   // ISAM2 업데이트
-  isam2_.update(new_factors_, new_values_);
-  isam2_.update();  // 추가 리니어화 패스
+  const auto update_result1 = isam2_.update(new_factors_, new_values_);
+  const auto update_result2 = isam2_.update();  // 추가 리니어화 패스
   new_factors_.resize(0);
   new_values_.clear();
+  (void)update_result1;
+  (void)update_result2;
 
   window_.push_back(idx);
   prev_index_ = idx;

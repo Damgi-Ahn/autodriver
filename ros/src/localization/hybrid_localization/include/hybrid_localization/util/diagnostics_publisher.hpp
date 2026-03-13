@@ -118,6 +118,11 @@ struct EskfDiagnosticsInput
   double kiss_time_alignment_error_ms{0.0};
   bool kiss_reset_candidate{false};
   size_t kiss_reset_count{0};
+
+  // FGO Stage 5 진단
+  bool has_fgo_stats{false};
+  size_t fgo_keyframe_count{0};   // 총 키프레임 수
+  size_t fgo_correction_count{0}; // 총 FGO 보정 횟수
 };
 
 class EskfDiagnosticsPublisher

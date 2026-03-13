@@ -21,6 +21,7 @@
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <skyautonet_msgs/msg/gphdt.hpp>
@@ -95,6 +96,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr m_preprocessed_imu_pub;
   rclcpp::Publisher<autoware_vehicle_msgs::msg::VelocityReport>::SharedPtr
     m_gnss_velocity_pub;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr m_keyframe_path_pub;
 
   // ---- Subscribers --------------------------------------------------------
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
@@ -265,6 +267,12 @@ private:
   // ImuBuffer: cb_imu 에서 push, maybe_push_keyframe 에서 read (m_state_mutex 보호)
   ImuBuffer m_imu_buffer_;
   EskfCorrector m_eskf_corrector_;
+
+  // ---- FGO Stage 5: 진단 카운터 + 경로 시각화 ----------------------------
+  size_t m_fgo_correction_count_{0};   // 총 FGO 보정 적용 횟수
+  size_t m_fgo_keyframe_count_{0};     // 총 생성된 키프레임 수
+  // 키프레임 경로 (m_state_mutex 보호, maybe_push_keyframe 에서 갱신)
+  nav_msgs::msg::Path m_keyframe_path_;
 
   // 키프레임 생성 후 내부 헬퍼
   void maybe_push_keyframe(

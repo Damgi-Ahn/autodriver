@@ -276,6 +276,16 @@ diagnostic_msgs::msg::DiagnosticArray EskfDiagnosticsPublisher::build(
       std::to_string(input.kiss_reset_count));
   }
 
+  // FGO Stage 5 진단
+  if (input.has_fgo_stats) {
+    add_key_value(
+      status, "fgo_keyframe_count",
+      std::to_string(input.fgo_keyframe_count));
+    add_key_value(
+      status, "fgo_correction_count",
+      std::to_string(input.fgo_correction_count));
+  }
+
   diag_array.status.push_back(status);
   return diag_array;
 }

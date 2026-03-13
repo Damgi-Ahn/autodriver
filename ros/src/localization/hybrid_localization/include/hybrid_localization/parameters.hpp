@@ -6,6 +6,7 @@
 #include <rclcpp/node.hpp>
 
 #include "hybrid_localization/eskf/eskf_core.hpp"
+#include "hybrid_localization/fgo/eskf_corrector.hpp"
 #include "hybrid_localization/fgo/fgo_backend.hpp"
 #include "hybrid_localization/fgo/imu_preintegration.hpp"
 #include "hybrid_localization/fgo/keyframe_buffer.hpp"
@@ -245,6 +246,9 @@ struct HybridLocalizationNodeParams
 
   // FGO Stage 3: ISAM2 백엔드
   FgoBackend::Params fgo_backend{};
+
+  // FGO Stage 4+5: EskfCorrector
+  EskfCorrector::Params fgo_corrector{};
 
   // 캘리브레이션 관련
   bool init_imu_calibration{false};

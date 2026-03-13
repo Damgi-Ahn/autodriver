@@ -142,8 +142,16 @@ public:
     m_q_map_from_base = state.q_map_from_base.normalized();
     m_b_g = state.b_g;
     m_b_a = state.b_a;
-    // 오차 상태는 암묵적으로 0이므로 P는 그대로 유지
-    // (FGO 가 P를 갱신하는 Stage 5에서 확장 예정)
+  }
+
+  // FGO 주변 공분산을 ESKF P 에 직접 주입 (EskfCorrector 에서 사용).
+  // 비양정(NaN/inf/비양) 입력은 무시한다.
+  void set_covariance(const P15 & P)
+  {
+    if (!P.allFinite() || P.diagonal().minCoeff() <= 0.0) {
+      return;
+    }
+    m_P = 0.5 * (P + P.transpose());  // 대칭화 후 적용
   }
 
 private:

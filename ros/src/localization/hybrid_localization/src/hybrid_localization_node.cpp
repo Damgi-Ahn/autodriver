@@ -48,6 +48,9 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
     m_fgo_backend.gtsam_preint_params(),
     gtsam::imuBias::ConstantBias{});
 
+  // FGO Stage 4+5: EskfCorrector 파라미터 적용
+  m_eskf_corrector_.set_params(m_node_params.fgo_corrector);
+
   const auto & io = m_node_params.io;
   OdomBuilderConfig odom_config;
   odom_config.map_frame = io.map_frame;
@@ -76,6 +79,9 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
     "/sensing/imu/imu_data", 10);
   m_gnss_velocity_pub = this->create_publisher<autoware_vehicle_msgs::msg::VelocityReport>(
     "/sensing/gnss/velocity_status", 10);
+  m_keyframe_path_pub = this->create_publisher<nav_msgs::msg::Path>(
+    "/localization/fgo/keyframe_path", 10);
+  m_keyframe_path_.header.frame_id = io.map_frame;
 
   m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
@@ -218,25 +224,52 @@ void HybridLocalizationNode::maybe_push_keyframe(
   }
 
   m_keyframe_buffer.push(kf);
+  ++m_fgo_keyframe_count_;
 
-  // FGO Stage 3+4: 그래프 업데이트 + ESKF 앵커 보정
+  // FGO Stage 5: 키프레임 경로에 새 포즈 추가
+  {
+    geometry_msgs::msg::PoseStamped kf_pose;
+    kf_pose.header.stamp = stamp;
+    kf_pose.header.frame_id = m_node_params.io.map_frame;
+    kf_pose.pose.position.x = state.p_map.x();
+    kf_pose.pose.position.y = state.p_map.y();
+    kf_pose.pose.position.z = state.p_map.z();
+    kf_pose.pose.orientation.w = state.q_map_from_base.w();
+    kf_pose.pose.orientation.x = state.q_map_from_base.x();
+    kf_pose.pose.orientation.y = state.q_map_from_base.y();
+    kf_pose.pose.orientation.z = state.q_map_from_base.z();
+    m_keyframe_path_.header.stamp = stamp;
+    m_keyframe_path_.poses.push_back(kf_pose);
+    // 슬라이딩 윈도우 크기에 맞게 경로도 트리밍
+    const size_t max_path = static_cast<size_t>(m_node_params.fgo_backend.window_size) * 2;
+    while (m_keyframe_path_.poses.size() > max_path) {
+      m_keyframe_path_.poses.erase(m_keyframe_path_.poses.begin());
+    }
+    m_keyframe_path_pub->publish(m_keyframe_path_);
+  }
+
+  // FGO Stage 3+4+5: 그래프 업데이트 + ESKF 앵커 보정 + 진단 카운터
   if (m_fgo_backend.is_initialized()) {
     const auto result = m_fgo_backend.update(kf, m_latest_fgo_gnss_);
     m_latest_fgo_gnss_.reset();  // 사용 후 소비
 
     if (result.valid) {
-      // Stage 4: FGO 결과를 ESKF 명목 상태에 반영 + keyframe 이후 IMU 재적분
+      // Stage 4+5: FGO 결과를 ESKF 명목 상태+공분산에 반영 + keyframe 이후 IMU 재적분
       const int n_reint = m_eskf_corrector_.apply(
         m_eskf, result, kf.stamp.seconds(), m_imu_buffer_);
+      ++m_fgo_correction_count_;
 
       RCLCPP_DEBUG(
         this->get_logger(),
-        "FGO correction: kf=%lu  p_fgo=(%.2f, %.2f, %.2f)  reint=%d",
+        "FGO correction #%zu: kf=%lu  p_fgo=(%.2f, %.2f, %.2f)  reint=%d  "
+        "P_pos_max=%.4f",
+        m_fgo_correction_count_,
         result.keyframe_index,
         result.state.p_map.x(),
         result.state.p_map.y(),
         result.state.p_map.z(),
-        n_reint);
+        n_reint,
+        result.P.block<3, 3>(0, 0).diagonal().maxCoeff());
     }
   }
 

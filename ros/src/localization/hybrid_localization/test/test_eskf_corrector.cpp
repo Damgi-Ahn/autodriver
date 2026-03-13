@@ -220,3 +220,72 @@ TEST(EskfCorrectorTest, QuaternionRestoredAfterCorrection)
   // euler[0] = yaw (ZYX 순서)
   EXPECT_NEAR(euler[0], yaw, 1e-6);
 }
+
+// ---------------------------------------------------------------------------
+// 테스트: FGO 공분산 주입 (inject_covariance=true)
+// ---------------------------------------------------------------------------
+TEST(EskfCorrectorTest, CovarianceInjectionEnabled)
+{
+  EskfCore eskf = make_initialized_eskf();
+
+  EskfCorrector::Params params;
+  params.inject_covariance = true;
+  EskfCorrector corrector(params);
+
+  auto result = make_valid_result();
+  // 양정 P15 구성 (대각 0.01)
+  result.P = EskfCore::P15::Identity() * 0.01;
+
+  ImuBuffer buf;
+  corrector.apply(eskf, result, 0.0, buf);
+
+  // P가 FGO P로 교체되었는지 확인 (pos 블록 대각 ≈ 0.01)
+  const auto P_after = eskf.P();
+  EXPECT_NEAR(P_after(0, 0), 0.01, 1e-9);
+  EXPECT_NEAR(P_after(3, 3), 0.01, 1e-9);
+  EXPECT_NEAR(P_after(6, 6), 0.01, 1e-9);
+}
+
+// ---------------------------------------------------------------------------
+// 테스트: FGO 공분산 주입 비활성화 (inject_covariance=false)
+// ---------------------------------------------------------------------------
+TEST(EskfCorrectorTest, CovarianceInjectionDisabled)
+{
+  EskfCore eskf = make_initialized_eskf();
+  // 초기화 후 P(0,0) 확인
+  const double P00_before = eskf.P()(0, 0);
+
+  EskfCorrector::Params params;
+  params.inject_covariance = false;
+  EskfCorrector corrector(params);
+
+  auto result = make_valid_result();
+  result.P = EskfCore::P15::Identity() * 0.01;  // FGO P는 매우 작은 값
+
+  ImuBuffer buf;
+  corrector.apply(eskf, result, 0.0, buf);
+
+  // P가 변경되지 않았는지 확인 (초기 init_pos_var 유지)
+  const auto P_after = eskf.P();
+  EXPECT_NEAR(P_after(0, 0), P00_before, 1e-9);
+}
+
+// ---------------------------------------------------------------------------
+// 테스트: 비양정 P는 주입 무시
+// ---------------------------------------------------------------------------
+TEST(EskfCorrectorTest, NonPositiveCovarianceIgnored)
+{
+  EskfCore eskf = make_initialized_eskf();
+  const double P00_before = eskf.P()(0, 0);
+
+  EskfCorrector corrector;  // inject_covariance=true (default)
+
+  auto result = make_valid_result();
+  result.P = EskfCore::P15::Zero();  // 비양정 → 무시
+
+  ImuBuffer buf;
+  corrector.apply(eskf, result, 0.0, buf);
+
+  // P(0,0)은 변경 없이 원래 값 유지
+  EXPECT_NEAR(eskf.P()(0, 0), P00_before, 1e-9);
+}
