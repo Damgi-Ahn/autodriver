@@ -11,7 +11,7 @@ ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, ipc_unix_soc
 find_package(AutodriverCUDA QUIET)
 if(NOT AutodriverCUDA_FOUND)
   message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
-  ament_auto_package()
+  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
   return()
 endif()
 
@@ -55,7 +55,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
   # test_camera_config — YAML parsing logic, no hardware required
-  ament_add_gtest(test_camera_config
+  ament_auto_add_gtest(test_camera_config
     test/test_camera_config.cpp
     src/camera_config.cpp
   )
@@ -65,7 +65,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_camera_config PRIVATE yaml-cpp)
 
   # test_camera_pipeline — pipeline string / initial state, no GStreamer device
-  ament_add_gtest(test_camera_pipeline
+  ament_auto_add_gtest(test_camera_pipeline
     test/test_camera_pipeline.cpp
     src/camera_pipeline.cpp
     src/camera_config.cpp
@@ -88,4 +88,4 @@ install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

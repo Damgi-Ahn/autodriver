@@ -33,7 +33,7 @@ autodriver_set_compiler_options(pipeline_profiler_node)
 # ---------------------------------------------------------------------------
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_pipeline_profiler test/test_pipeline_profiler.cpp)
+  ament_auto_add_gtest(test_pipeline_profiler test/test_pipeline_profiler.cpp)
   autodriver_set_compiler_options(test_pipeline_profiler)
   target_link_libraries(test_pipeline_profiler pipeline_profiler_lib)
   target_include_directories(test_pipeline_profiler PRIVATE include)
@@ -43,6 +43,7 @@ endif()
 # Install
 # ---------------------------------------------------------------------------
 ament_auto_package(
+  USE_SCOPED_HEADER_INSTALL_DIR
   INSTALL_TO_SHARE
   launch
 )

@@ -10,7 +10,7 @@ ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs, diagnostic_msgs
 find_package(AutodriverCUDA QUIET)
 if(NOT AutodriverCUDA_FOUND)
   message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
-  ament_auto_package()
+  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
   return()
 endif()
 
@@ -43,7 +43,7 @@ target_link_libraries(gpu_watchdog_node PRIVATE gpu_watchdog_lib)
 # ---------------------------------------------------------------------------
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_gpu_watchdog test/test_gpu_watchdog.cpp)
+  ament_auto_add_gtest(test_gpu_watchdog test/test_gpu_watchdog.cpp)
   autodriver_set_compiler_options(test_gpu_watchdog)
   target_link_libraries(test_gpu_watchdog PRIVATE gpu_watchdog_lib)
   target_include_directories(test_gpu_watchdog PRIVATE include)
@@ -53,6 +53,7 @@ endif()
 # Install
 # ---------------------------------------------------------------------------
 ament_auto_package(
+  USE_SCOPED_HEADER_INSTALL_DIR
   INSTALL_TO_SHARE
   launch
   include

@@ -61,13 +61,13 @@ install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
 # ---------------------------------------------------------------------------
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_diagnostic_parser test/test_diagnostic_parser.cpp)
+  ament_auto_add_gtest(test_diagnostic_parser test/test_diagnostic_parser.cpp)
   autodriver_set_compiler_options(test_diagnostic_parser)
   target_link_libraries(test_diagnostic_parser hybrid_localization_evaluation_tool_lib)
 
-  ament_add_gtest(test_kpi_engine test/test_kpi_engine.cpp)
+  ament_auto_add_gtest(test_kpi_engine test/test_kpi_engine.cpp)
   autodriver_set_compiler_options(test_kpi_engine)
   target_link_libraries(test_kpi_engine hybrid_localization_evaluation_tool_lib)
 endif()
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

@@ -7,4 +7,4 @@ ament_auto_find_build_dependencies()
 install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
 install(DIRECTORY config/  DESTINATION share/${PROJECT_NAME}/config)
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

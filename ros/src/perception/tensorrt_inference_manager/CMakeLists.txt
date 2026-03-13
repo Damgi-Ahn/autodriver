@@ -10,7 +10,7 @@ ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, std_msgs, ip
 find_package(AutodriverCUDA QUIET)
 if(NOT AutodriverCUDA_FOUND)
   message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
-  ament_auto_package()
+  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
   return()
 endif()
 find_package(TensorRT REQUIRED)
@@ -74,14 +74,14 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
   # ── test_scheduler ────────────────────────────────────────────────────────
-  ament_add_gtest(test_scheduler
+  ament_auto_add_gtest(test_scheduler
     test/test_scheduler.cpp
   )
   autodriver_set_compiler_options(test_scheduler)
   target_link_libraries(test_scheduler PRIVATE inference_lib)
 
   # ── test_nvbuf_pool ───────────────────────────────────────────────────────
-  ament_add_gtest(test_nvbuf_pool
+  ament_auto_add_gtest(test_nvbuf_pool
     test/test_nvbuf_pool.cpp
   )
   autodriver_set_compiler_options(test_nvbuf_pool)
@@ -97,4 +97,4 @@ install(DIRECTORY include/  DESTINATION include)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

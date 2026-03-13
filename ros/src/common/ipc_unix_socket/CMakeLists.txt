@@ -23,7 +23,7 @@ target_include_directories(${PROJECT_NAME}
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
-  ament_add_gtest(test_${PROJECT_NAME}
+  ament_auto_add_gtest(test_${PROJECT_NAME}
     test/test_ipc_unix_socket.cpp
   )
   autodriver_set_compiler_options(test_${PROJECT_NAME})
@@ -35,6 +35,7 @@ endif()
 
 # ── Install ───────────────────────────────────────────────────────────────────
 ament_auto_package(
+  USE_SCOPED_HEADER_INSTALL_DIR
   INSTALL_TO_SHARE
   include
 )

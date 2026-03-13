@@ -11,7 +11,7 @@ ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs, diagnostic_msgs
 find_package(AutodriverCUDA QUIET)
 if(NOT AutodriverCUDA_FOUND)
   message(STATUS "metrics_manager: CUDA not found; skipping build of this package.")
-  ament_auto_package()
+  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
   return()
 endif()
 
@@ -44,7 +44,7 @@ target_link_libraries(metrics_manager_node PRIVATE metrics_manager_lib)
 # ---------------------------------------------------------------------------
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_metrics_manager test/test_metrics_manager.cpp)
+  ament_auto_add_gtest(test_metrics_manager test/test_metrics_manager.cpp)
   autodriver_set_compiler_options(test_metrics_manager)
   target_link_libraries(test_metrics_manager PRIVATE metrics_manager_lib)
 endif()
@@ -53,6 +53,7 @@ endif()
 # Install
 # ---------------------------------------------------------------------------
 ament_auto_package(
+  USE_SCOPED_HEADER_INSTALL_DIR
   INSTALL_TO_SHARE
   launch
   include
