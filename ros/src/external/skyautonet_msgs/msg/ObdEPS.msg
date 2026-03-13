@@ -1,0 +1,7 @@
+bool eps_commu_error
+bool eps_angle_sensor
+bool eps_torqe_sensor
+bool eps_supply_batt_high
+bool eps_supply_batt_low
+bool eps_control_unit
+bool eps_motor_error

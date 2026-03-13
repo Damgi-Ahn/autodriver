@@ -1,0 +1,12 @@
+float32 speed
+float64 rpm
+float64 steering
+uint8 accel_pedal_switch
+uint8 accel_pedal
+uint8 brake_pedal
+uint8 gear_pos
+uint8 target_speed
+float32 target_accel_decel
+uint8 mode
+float32 accel_lat
+float32 accel_lon

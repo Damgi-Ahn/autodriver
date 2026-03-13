@@ -1,0 +1,5 @@
+bool dc_over_temp
+bool dc_batt_under_vol
+bool dc_batt_over_vol
+bool dc_over_curr
+bool dc_under_temp

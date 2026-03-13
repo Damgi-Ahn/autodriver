@@ -1,0 +1,5 @@
+unique_identifier_msgs/UUID uuid
+sensor_msgs/CompressedImage image
+uint8 cluster_result
+uint8 distance
+uint8 direction

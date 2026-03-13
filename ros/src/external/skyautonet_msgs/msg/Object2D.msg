@@ -1,0 +1,10 @@
+float32 x
+float32 y
+int32 width
+int32 height
+string label
+int32 cam_number
+int32 fod_risk
+float32 distance_lat
+float32 distance_lon
+float32 score

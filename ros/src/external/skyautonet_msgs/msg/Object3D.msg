@@ -1,0 +1,11 @@
+float32 min_x
+float32 min_y
+float32 min_z
+float32 max_x
+float32 max_y
+float32 max_z
+float32 center_x
+float32 center_y
+float32 center_z
+float32 distance_xy
+float32 distance_xyz

@@ -1,0 +1,5 @@
+autoware_planning_msgs/LaneletRoute[] route
+geometry_msgs/PoseStamped[] point
+int8 dist
+---
+geometry_msgs/PoseStamped goal_point

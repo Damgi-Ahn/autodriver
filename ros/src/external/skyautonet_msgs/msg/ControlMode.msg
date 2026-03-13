@@ -1,0 +1,2 @@
+bool control_mode
+string control_method 

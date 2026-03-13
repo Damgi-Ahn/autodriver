@@ -1,0 +1,4 @@
+bool front_lh_tire_error
+bool front_rh_tire_error
+bool rear_lh_tire_error
+bool rear_rh_tire_error

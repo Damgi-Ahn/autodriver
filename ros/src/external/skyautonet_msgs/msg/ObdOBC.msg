@@ -1,0 +1,5 @@
+bool obc_charger_temp
+bool obc_input_vol
+bool obc_hardware_status
+bool obc_commu_status
+bool obc_charger_fault
