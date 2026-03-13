@@ -7,12 +7,17 @@ find_package(autodriver_cmake REQUIRED)
 include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs, diagnostic_msgs
 
-find_package(AutodriverCUDA REQUIRED)
+find_package(AutodriverCUDA QUIET)
+if(NOT AutodriverCUDA_FOUND)
+  message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
+  ament_auto_package()
+  return()
+endif()
 
 # ---------------------------------------------------------------------------
 # Library (shared with tests)
 # ---------------------------------------------------------------------------
-add_library(gpu_watchdog_lib STATIC
+ament_auto_add_library(gpu_watchdog_lib STATIC
   src/gpu_watchdog.cpp
 )
 autodriver_set_compiler_options(gpu_watchdog_lib)
@@ -24,13 +29,10 @@ target_include_directories(gpu_watchdog_lib PUBLIC
 
 target_link_libraries(gpu_watchdog_lib PUBLIC Autodriver::CUDA)
 
-ament_target_dependencies(gpu_watchdog_lib PUBLIC
-  rclcpp std_msgs diagnostic_msgs)
-
 # ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
-add_executable(gpu_watchdog_node
+ament_auto_add_executable(gpu_watchdog_node
   src/gpu_watchdog_node.cpp
 )
 autodriver_set_compiler_options(gpu_watchdog_node)
@@ -44,13 +46,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_gpu_watchdog test/test_gpu_watchdog.cpp)
   autodriver_set_compiler_options(test_gpu_watchdog)
   target_link_libraries(test_gpu_watchdog PRIVATE gpu_watchdog_lib)
+  target_include_directories(test_gpu_watchdog PRIVATE include)
 endif()
 
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
-install(TARGETS gpu_watchdog_node DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
-
-ament_auto_package()
+ament_auto_package(
+  INSTALL_TO_SHARE
+  launch
+  include
+)

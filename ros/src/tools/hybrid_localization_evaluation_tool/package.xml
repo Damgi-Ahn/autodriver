@@ -13,6 +13,7 @@
 
   <depend>rclcpp</depend>
   <depend>diagnostic_msgs</depend>
+  <depend>autodriver_cmake</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
 

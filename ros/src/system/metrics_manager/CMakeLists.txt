@@ -7,12 +7,18 @@ find_package(autodriver_cmake REQUIRED)
 include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs, diagnostic_msgs
 
-find_package(AutodriverCUDA REQUIRED)
+
+find_package(AutodriverCUDA QUIET)
+if(NOT AutodriverCUDA_FOUND)
+  message(STATUS "metrics_manager: CUDA not found; skipping build of this package.")
+  ament_auto_package()
+  return()
+endif()
 
 # ---------------------------------------------------------------------------
 # Library
 # ---------------------------------------------------------------------------
-add_library(metrics_manager_lib STATIC
+ament_auto_add_library(metrics_manager_lib STATIC
   src/metrics_manager.cpp
 )
 autodriver_set_compiler_options(metrics_manager_lib)
@@ -24,13 +30,10 @@ target_include_directories(metrics_manager_lib PUBLIC
 
 target_link_libraries(metrics_manager_lib PUBLIC Autodriver::CUDA)
 
-ament_target_dependencies(metrics_manager_lib PUBLIC
-  rclcpp std_msgs diagnostic_msgs)
-
 # ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
-add_executable(metrics_manager_node
+ament_auto_add_executable(metrics_manager_node
   src/metrics_manager_node.cpp
 )
 autodriver_set_compiler_options(metrics_manager_node)
@@ -49,8 +52,8 @@ endif()
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
-install(TARGETS metrics_manager_node DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
-
-ament_auto_package()
+ament_auto_package(
+  INSTALL_TO_SHARE
+  launch
+  include
+)

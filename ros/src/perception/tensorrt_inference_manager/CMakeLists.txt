@@ -7,7 +7,12 @@ find_package(autodriver_cmake REQUIRED)
 include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, std_msgs, ipc_unix_socket
 
-find_package(AutodriverCUDA REQUIRED)
+find_package(AutodriverCUDA QUIET)
+if(NOT AutodriverCUDA_FOUND)
+  message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
+  ament_auto_package()
+  return()
+endif()
 find_package(TensorRT REQUIRED)
 if(DEFINED TensorRT_VERSION_MAJOR AND TensorRT_VERSION_MAJOR LESS 10)
   message(FATAL_ERROR

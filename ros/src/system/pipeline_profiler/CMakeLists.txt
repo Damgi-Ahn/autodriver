@@ -10,7 +10,7 @@ ament_auto_find_build_dependencies()  # Finds: rclcpp, std_msgs
 # ---------------------------------------------------------------------------
 # Library
 # ---------------------------------------------------------------------------
-add_library(pipeline_profiler_lib STATIC
+ament_auto_add_library(pipeline_profiler_lib STATIC
   src/pipeline_profiler.cpp
 )
 autodriver_set_compiler_options(pipeline_profiler_lib)
@@ -20,17 +20,13 @@ target_include_directories(pipeline_profiler_lib PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-ament_target_dependencies(pipeline_profiler_lib PUBLIC
-  rclcpp std_msgs)
-
 # ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
-add_executable(pipeline_profiler_node
+ament_auto_add_executable(pipeline_profiler_node
   src/pipeline_profiler_node.cpp
 )
 autodriver_set_compiler_options(pipeline_profiler_node)
-target_link_libraries(pipeline_profiler_node PRIVATE pipeline_profiler_lib)
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -39,14 +35,14 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_pipeline_profiler test/test_pipeline_profiler.cpp)
   autodriver_set_compiler_options(test_pipeline_profiler)
-  target_link_libraries(test_pipeline_profiler PRIVATE pipeline_profiler_lib)
+  target_link_libraries(test_pipeline_profiler pipeline_profiler_lib)
+  target_include_directories(test_pipeline_profiler PRIVATE include)
 endif()
 
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
-install(TARGETS pipeline_profiler_node DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
-
-ament_auto_package()
+ament_auto_package(
+  INSTALL_TO_SHARE
+  launch
+)

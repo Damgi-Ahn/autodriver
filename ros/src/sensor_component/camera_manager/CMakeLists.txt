@@ -8,7 +8,13 @@ include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()  # Finds: rclcpp, sensor_msgs, ipc_unix_socket
 
 # ── System dependencies ───────────────────────────────────────────────────────
-find_package(AutodriverCUDA REQUIRED)
+find_package(AutodriverCUDA QUIET)
+if(NOT AutodriverCUDA_FOUND)
+  message(STATUS "gpu_watchdog: CUDA not found; skipping build of this package.")
+  ament_auto_package()
+  return()
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET
   gstreamer-1.0

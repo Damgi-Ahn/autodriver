@@ -13,6 +13,8 @@
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
+
+  <depend>autodriver_cmake</depend>
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>diagnostic_msgs</depend>
