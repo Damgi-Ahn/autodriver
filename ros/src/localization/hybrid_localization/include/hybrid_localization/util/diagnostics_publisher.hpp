@@ -97,6 +97,10 @@ struct EskfDiagnosticsInput
   bool has_fgo_stats{false};
   size_t fgo_keyframe_count{0};   // 총 키프레임 수
   size_t fgo_correction_count{0}; // 총 FGO 보정 횟수
+
+  // 상위 시스템 fault 보고용 수준 (diagnostic_msgs::msg::DiagnosticStatus level)
+  // 0=OK, 1=WARN, 2=ERROR, 3=STALE
+  uint8_t diag_level{0};
 };
 
 class EskfDiagnosticsPublisher

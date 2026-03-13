@@ -438,6 +438,12 @@ void HybridLocalizationNode::gnss_callback(
     return;
   }
 
+  // GNSS 신호 품질 OK: last_gnss_good_stamp_ 갱신 (상태 머신 DEGRADED 판단용)
+  {
+    std::scoped_lock<std::mutex> lock(gnss_recover_mutex_);
+    last_gnss_good_stamp_ = current_stamp;
+  }
+
   // NOTE: Even when deactivated, keep publishing GNSS debug outputs.
   // Filter state init/update is gated later by `activated`.
   // 위경도 → map 좌표 투영 (맵 정보가 준비된 경우)

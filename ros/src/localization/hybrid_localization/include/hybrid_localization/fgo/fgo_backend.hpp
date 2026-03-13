@@ -68,6 +68,10 @@ public:
     // GNSS 최소 status (이 이상이어야 FGO 위치/속도 팩터 사용)
     int gnss_min_status_for_pos{0};         // 0=fix
     int gnss_min_status_for_vel{0};
+
+    // 적응형 윈도우 크기 설정
+    bool adaptive_window_enable{false};
+    int  adaptive_window_max{40};   // GNSS 불량 시 확장되는 최대 윈도우 크기
   };
 
   // ----- 최적화 결과 -------------------------------------------------------
@@ -90,6 +94,9 @@ public:
     const ImuPreintegration::Params & imu_params);
 
   bool is_initialized() const {return initialized_;}
+
+  // 런타임 윈도우 크기 변경 (적응형 윈도우 제어용; [1, adaptive_window_max] 범위로 클램프)
+  void set_window_size(int n);
 
   // ----- 키프레임 업데이트 ------------------------------------------------
 

@@ -25,14 +25,17 @@ diagnostic_msgs::msg::DiagnosticArray EskfDiagnosticsPublisher::build(
 
   diagnostic_msgs::msg::DiagnosticStatus status;
   status.name = "hybrid_localization";
-  status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+  // diag_level: 0=OK, 1=WARN, 2=ERROR, 3=STALE (상태 머신이 결정, 기본=OK)
+  status.level = input.diag_level;
   status.message = "Phase 7: ESKF running";
 
   add_key_value(
     status, "is_activated",
     input.is_activated ? "true" : "false");
   if (!input.is_activated) {
-    status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+    if (status.level < diagnostic_msgs::msg::DiagnosticStatus::WARN) {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+    }
     status.message = "process is not activated";
   }
 

@@ -50,6 +50,10 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
 
   // FGO Stage 4+5: EskfCorrector 파라미터 적용
   eskf_corrector_.set_params(node_params_.fgo_corrector);
+  imu_buffer_.set_max_size(static_cast<size_t>(node_params_.imu_buffer_max_samples));
+
+  // 적응형 FGO 윈도우: 초기 크기는 파라미터 기본값으로 설정
+  current_fgo_window_size_ = node_params_.fgo_backend.window_size;
 
   const auto & io = node_params_.io;
   OdomBuilderConfig odom_config;
@@ -81,6 +85,8 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
     "/sensing/gnss/velocity_status", 10);
   keyframe_path_pub_ = this->create_publisher<nav_msgs::msg::Path>(
     "/localization/fgo/keyframe_path", 10);
+  state_pub_ = this->create_publisher<std_msgs::msg::String>(
+    "/localization/state", 10);
   keyframe_path_.header.frame_id = io.map_frame;
 
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -248,6 +254,13 @@ void HybridLocalizationNode::maybe_push_keyframe(
     keyframe_path_pub_->publish(keyframe_path_);
   }
 
+  // 적응형 FGO 윈도우: 변경이 있을 경우 백엔드에 반영
+  if (node_params_.fgo_backend.adaptive_window_enable &&
+    current_fgo_window_size_ != node_params_.fgo_backend.window_size)
+  {
+    fgo_backend_.set_window_size(current_fgo_window_size_);
+  }
+
   // FGO Stage 3+4+5: 그래프 업데이트 + ESKF 앵커 보정 + 진단 카운터
   if (fgo_backend_.is_initialized()) {
     const auto result = fgo_backend_.update(kf, latest_fgo_gnss_);
@@ -263,7 +276,7 @@ void HybridLocalizationNode::maybe_push_keyframe(
         this->get_logger(),
         "FGO correction #%zu: kf=%lu  p_fgo=(%.2f, %.2f, %.2f)  reint=%d  "
         "P_pos_max=%.4f",
-        fgo_correction_count_,
+        fgo_correction_count_.load(),
         result.keyframe_index,
         result.state.p_map.x(),
         result.state.p_map.y(),

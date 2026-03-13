@@ -20,8 +20,10 @@ namespace hybrid_localization
 // NOTE: 노드 파라미터를 도메인별로 구조화하여 로딩/적용/참조를 단순화한다.
 struct HeadingYawParams
 {
+  // `heading.enable_yaw_update` [-]
   // - GNSS 헤딩(GPHDT) 기반 yaw 업데이트 on/off.
   // - OFF: yaw는 IMU/기타 제약에 더 의존(드리프트↑ 가능), 점프/이상치 영향↓
+  bool enable_yaw_update{true};
 
   // `heading.yaw_var` [rad^2]
   // - ↓: 헤딩 yaw를 더 강하게 신뢰(수렴 빠름), 헤딩 점프/멀티패스에 취약
@@ -249,6 +251,12 @@ struct HybridLocalizationNodeParams
 
   // FGO Stage 4+5: EskfCorrector
   EskfCorrector::Params fgo_corrector{};
+
+  // ImuBuffer 최대 샘플 수 (200Hz×2s=400 기본값)
+  int imu_buffer_max_samples{400};
+
+  // GNSS 불량 → DEGRADED 상태 전이 타임아웃 [s]
+  double gnss_degraded_timeout_sec{5.0};
 
   // 캘리브레이션 관련
   bool init_imu_calibration{false};

@@ -1,6 +1,7 @@
 #ifndef HYBRID_LOCALIZATION__FGO__IMU_BUFFER_HPP_
 #define HYBRID_LOCALIZATION__FGO__IMU_BUFFER_HPP_
 
+#include <atomic>
 #include <deque>
 #include <mutex>
 #include <vector>
@@ -50,10 +51,14 @@ public:
   // 가장 최신 샘플의 타임스탬프 (없으면 -1)
   double latest_stamp_sec() const;
 
+  // 오버플로우 누적 카운터를 반환하고 0으로 리셋 (publish 스레드에서 주기적 로깅용)
+  size_t take_overflow_count();
+
 private:
   mutable std::mutex mutex_;
   std::deque<ImuMeasurement> buffer_;
   size_t max_size_;
+  std::atomic<size_t> overflow_count_{0};
 };
 
 }  // namespace hybrid_localization
