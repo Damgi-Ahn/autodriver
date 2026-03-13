@@ -85,10 +85,10 @@ public:
 
   explicit EskfCore(const EskfCoreParams & params = EskfCoreParams{});
 
-  void set_params(const EskfCoreParams & params) {m_params = params;}
-  const EskfCoreParams & params() const {return m_params;}
+  void set_params(const EskfCoreParams & params) {params_ = params;}
+  const EskfCoreParams & params() const {return params_;}
 
-  bool initialized() const {return m_initialized;}
+  bool initialized() const {return initialized_;}
   bool finite() const;
 
   void reset();
@@ -126,22 +126,22 @@ public:
     double var_radps2);
 
   // State getters
-  const Eigen::Vector3d & p_map() const {return m_p_map;}
-  const Eigen::Vector3d & v_map() const {return m_v_map;}
-  const Eigen::Quaterniond & q_map_from_base() const {return m_q_map_from_base;}
-  const Eigen::Vector3d & b_g() const {return m_b_g;}
-  const Eigen::Vector3d & b_a() const {return m_b_a;}
-  const P15 & P() const {return m_P;}
+  const Eigen::Vector3d & p_map() const {return p_map_;}
+  const Eigen::Vector3d & v_map() const {return v_map_;}
+  const Eigen::Quaterniond & q_map_from_base() const {return q_map_from_base_;}
+  const Eigen::Vector3d & b_g() const {return b_g_;}
+  const Eigen::Vector3d & b_a() const {return b_a_;}
+  const P15 & P() const {return P_;}
 
   // FGO 앵커 보정용 상태 직접 주입 (EskfCorrector 에서 사용)
   // 오차 상태 δx는 0으로 리셋되고, 명목 상태만 교체된다.
   void set_nominal_state(const NominalState & state)
   {
-    m_p_map = state.p_map;
-    m_v_map = state.v_map;
-    m_q_map_from_base = state.q_map_from_base.normalized();
-    m_b_g = state.b_g;
-    m_b_a = state.b_a;
+    p_map_ = state.p_map;
+    v_map_ = state.v_map;
+    q_map_from_base_ = state.q_map_from_base.normalized();
+    b_g_ = state.b_g;
+    b_a_ = state.b_a;
   }
 
   // FGO 주변 공분산을 ESKF P 에 직접 주입 (EskfCorrector 에서 사용).
@@ -151,7 +151,7 @@ public:
     if (!P.allFinite() || P.diagonal().minCoeff() <= 0.0) {
       return;
     }
-    m_P = 0.5 * (P + P.transpose());  // 대칭화 후 적용
+    P_ = 0.5 * (P + P.transpose());  // 대칭화 후 적용
   }
 
 private:
@@ -186,23 +186,23 @@ private:
     double gate,
     RInflateChannel channel = RInflateChannel::kNone);
 
-  EskfCoreParams m_params{};
-  bool m_initialized{false};
+  EskfCoreParams params_{};
+  bool initialized_{false};
 
   // Nominal state
-  Eigen::Vector3d m_p_map{Eigen::Vector3d::Zero()};
-  Eigen::Vector3d m_v_map{Eigen::Vector3d::Zero()};
-  Eigen::Quaterniond m_q_map_from_base{Eigen::Quaterniond::Identity()};
-  Eigen::Vector3d m_b_g{Eigen::Vector3d::Zero()};
-  Eigen::Vector3d m_b_a{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d p_map_{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d v_map_{Eigen::Vector3d::Zero()};
+  Eigen::Quaterniond q_map_from_base_{Eigen::Quaterniond::Identity()};
+  Eigen::Vector3d b_g_{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d b_a_{Eigen::Vector3d::Zero()};
 
   // Error-state covariance
-  P15 m_P{P15::Zero()};
+  P15 P_{P15::Zero()};
 
   // Final R_eff inflation state (asymmetric: rise-immediate / decay-exponential)
-  double m_r_eff_inflate_gnss_pos_{1.0};
-  double m_r_eff_inflate_gnss_vel_{1.0};
-  double m_r_eff_inflate_heading_yaw_{1.0};
+  double r_eff_inflate_gnss_pos_{1.0};
+  double r_eff_inflate_gnss_vel_{1.0};
+  double r_eff_inflate_heading_yaw_{1.0};
 };
 
 } // namespace hybrid_localization

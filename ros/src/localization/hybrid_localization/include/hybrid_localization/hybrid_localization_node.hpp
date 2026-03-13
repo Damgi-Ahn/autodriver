@@ -80,107 +80,107 @@ private:
 
   // ---- Callback groups (one per frequency domain) -------------------------
   // IMU(200Hz): 전용 그룹 — 다른 콜백에 블록되지 않도록 격리
-  rclcpp::CallbackGroup::SharedPtr m_imu_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr imu_cb_group_;
   // GNSS/Vehicle/Heading(1-10Hz): 상호 배타적 — 상태 갱신 충돌 방지
-  rclcpp::CallbackGroup::SharedPtr m_sensor_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr sensor_cb_group_;
   // 발행 타이머(200Hz): 독립 그룹
-  rclcpp::CallbackGroup::SharedPtr m_timer_cb_group_;
+  rclcpp::CallbackGroup::SharedPtr timer_cb_group_;
 
   // ---- Publishers ---------------------------------------------------------
-  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_odom_pub;
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr m_pose_pub;
-  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_gnss_odom_pub;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr gnss_odom_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
-    m_gnss_pose_cov_pub;
-  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr m_diag_pub;
-  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr m_preprocessed_imu_pub;
+    gnss_pose_cov_pub_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diag_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr preprocessed_imu_pub_;
   rclcpp::Publisher<autoware_vehicle_msgs::msg::VelocityReport>::SharedPtr
-    m_gnss_velocity_pub;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr m_keyframe_path_pub;
+    gnss_velocity_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr keyframe_path_pub_;
 
   // ---- Subscribers --------------------------------------------------------
-  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr m_imu_sub;
-  rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr m_gnss_sub;
-  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr m_gnss_vel_sub;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr gnss_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr gnss_vel_sub_;
   rclcpp::Subscription<tier4_map_msgs::msg::MapProjectorInfo>::SharedPtr
-    m_map_projector_sub;
+    map_projector_sub_;
   rclcpp::Subscription<autoware_vehicle_msgs::msg::VelocityReport>::SharedPtr
-    m_velocity_sub;
+    velocity_sub_;
   rclcpp::Subscription<autoware_vehicle_msgs::msg::SteeringReport>::SharedPtr
-    m_steering_sub;
-  rclcpp::Subscription<skyautonet_msgs::msg::Gphdt>::SharedPtr m_heading_sub;
+    steering_sub_;
+  rclcpp::Subscription<skyautonet_msgs::msg::Gphdt>::SharedPtr heading_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
-    m_initialpose_sub;
+    initialpose_sub_;
 
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr service_trigger_node_;
 
   // ---- TF -----------------------------------------------------------------
-  std::shared_ptr<tf2_ros::Buffer> m_tf_buffer;
-  std::shared_ptr<tf2_ros::TransformListener> m_tf_listener;
-  std::shared_ptr<tf2_ros::TransformBroadcaster> m_tf_broadcaster;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-  rclcpp::TimerBase::SharedPtr m_publish_timer;
+  rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // ---- Parameters ---------------------------------------------------------
-  HybridLocalizationNodeParams m_node_params;
-  TimeProcessor m_time_processor{m_node_params.time};
+  HybridLocalizationNodeParams node_params_;
+  TimeProcessor time_processor_{node_params_.time};
 
   // ---- Modules ------------------------------------------------------------
-  TfCache m_tf_cache;
-  MapProjector m_map_projector;
-  GnssPreprocessor m_gnss_preprocessor;
-  mutable std::mutex m_heading_arbitrator_mutex;
-  GnssHeadingArbitrator m_heading_arbitrator;
-  ImuPreprocessor m_imu_preprocessor;
-  ImuCalibrationManager m_imu_calibration_manager;
+  TfCache tf_cache_;
+  MapProjector map_projector_;
+  GnssPreprocessor gnss_preprocessor_;
+  mutable std::mutex heading_arbitrator_mutex_;
+  GnssHeadingArbitrator heading_arbitrator_;
+  ImuPreprocessor imu_preprocessor_;
+  ImuCalibrationManager imu_calibration_manager_;
   static constexpr double IMU_CALIBRATION_DURATION_SEC = 30.0;
 
   // ---- Counters & timestamps ----------------------------------------------
-  size_t m_imu_count{0};
-  size_t m_gnss_count{0};
-  size_t m_gnss_vel_count{0};
-  size_t m_velocity_count{0};
-  size_t m_steering_count{0};
-  bool m_map_projector_received{false};
+  size_t imu_count_{0};
+  size_t gnss_count_{0};
+  size_t gnss_vel_count_{0};
+  size_t velocity_count_{0};
+  size_t steering_count_{0};
+  bool map_projector_received_{false};
 
-  rclcpp::Time m_last_imu_stamp;
-  rclcpp::Time m_last_gnss_stamp;
-  rclcpp::Time m_last_gnss_vel_stamp;
-  rclcpp::Time m_last_velocity_stamp;
-  rclcpp::Time m_last_steering_stamp;
-  rclcpp::Time m_last_heading_stamp;
+  rclcpp::Time last_imu_stamp_;
+  rclcpp::Time last_gnss_stamp_;
+  rclcpp::Time last_gnss_vel_stamp_;
+  rclcpp::Time last_velocity_stamp_;
+  rclcpp::Time last_steering_stamp_;
+  rclcpp::Time last_heading_stamp_;
 
-  ImuDtStats m_imu_dt_stats;
+  ImuDtStats imu_dt_stats_;
 
   // ---- Latest sensor buffers ----------------------------------------------
-  sensor_msgs::msg::NavSatFix::SharedPtr m_latest_gnss;
-  geometry_msgs::msg::TwistStamped::SharedPtr m_latest_gnss_vel;
-  autoware_vehicle_msgs::msg::VelocityReport::SharedPtr m_latest_velocity;
-  autoware_vehicle_msgs::msg::SteeringReport::SharedPtr m_latest_steering;
-  skyautonet_msgs::msg::Gphdt::SharedPtr m_latest_heading;
-  double m_latest_heading_yaw_rad{0.0};
-  bool m_heading_received{false};
+  sensor_msgs::msg::NavSatFix::SharedPtr latest_gnss_;
+  geometry_msgs::msg::TwistStamped::SharedPtr latest_gnss_vel_;
+  autoware_vehicle_msgs::msg::VelocityReport::SharedPtr latest_velocity_;
+  autoware_vehicle_msgs::msg::SteeringReport::SharedPtr latest_steering_;
+  skyautonet_msgs::msg::Gphdt::SharedPtr latest_heading_;
+  double latest_heading_yaw_rad_{0.0};
+  bool heading_received_{false};
 
-  rclcpp::Time m_eskf_init_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time eskf_init_stamp_{0, 0, RCL_ROS_TIME};
   static constexpr double k_heading_rate_gate_init_grace_sec_{5.0};
-  int m_heading_rate_gate_skip_count_{0};
-  rclcpp::Time m_heading_rate_gate_skip_window_start_{0, 0, RCL_ROS_TIME};
+  int heading_rate_gate_skip_count_{0};
+  rclcpp::Time heading_rate_gate_skip_window_start_{0, 0, RCL_ROS_TIME};
 
   // ---- Diagnostics debug --------------------------------------------------
-  double m_last_yaw_meas_var_rad2{0.01};
-  double m_last_heading_status_inflate_dbg{1.0};
-  double m_last_heading_recover_inflate_dbg{1.0};
-  double m_last_heading_yaw_var_pre_nis_dbg{std::numeric_limits<double>::quiet_NaN()};
-  double m_last_heading_yaw_var_applied_dbg{std::numeric_limits<double>::quiet_NaN()};
-  std::string m_last_heading_yaw_var_source_dbg{"init"};
-  EskfYawUpdateDebug m_last_heading_yaw_update_dbg{};
+  double last_yaw_meas_var_rad2_{0.01};
+  double last_heading_status_inflate_dbg_{1.0};
+  double last_heading_recover_inflate_dbg_{1.0};
+  double last_heading_yaw_var_pre_nis_dbg_{std::numeric_limits<double>::quiet_NaN()};
+  double last_heading_yaw_var_applied_dbg_{std::numeric_limits<double>::quiet_NaN()};
+  std::string last_heading_yaw_var_source_dbg_{"init"};
+  EskfYawUpdateDebug last_heading_yaw_update_dbg_{};
 
-  size_t m_diag_counter{0};
-  EskfDiagnosticsPublisher m_diag_builder;
+  size_t diag_counter_{0};
+  EskfDiagnosticsPublisher diag_builder_;
 
   // ---- Activation control -------------------------------------------------
-  bool m_is_activated_{true};
-  bool m_use_external_initialpose_{false};
+  bool is_activated_{true};
+  bool use_external_initialpose_{false};
 
   // ---- Helper methods -----------------------------------------------------
   void reset_imu_dt_stats();
@@ -212,67 +212,67 @@ private:
     double * recover_inflate = nullptr);
 
   // ---- ESKF state ---------------------------------------------------------
-  mutable std::mutex m_state_mutex;
-  EskfCore m_eskf{m_node_params.eskf};
-  rclcpp::Time m_state_stamp{0, 0, RCL_ROS_TIME};
+  mutable std::mutex state_mutex_;
+  EskfCore eskf_{node_params_.eskf};
+  rclcpp::Time state_stamp_{0, 0, RCL_ROS_TIME};
 
-  bool m_pending_init_position{false};
-  Eigen::Vector3d m_pending_init_p_map{Eigen::Vector3d::Zero()};
-  rclcpp::Time m_pending_init_stamp{0, 0, RCL_ROS_TIME};
+  bool pending_init_position_{false};
+  Eigen::Vector3d pending_init_p_map_{Eigen::Vector3d::Zero()};
+  rclcpp::Time pending_init_stamp_{0, 0, RCL_ROS_TIME};
 
-  OdomBuilder m_odom_builder;
-  GnssUpdateHandler m_gnss_update_handler;
-  geometry_msgs::msg::Vector3 m_last_omega_base{};
-  bool m_have_last_omega_base{false};
-  EskfGnssPosUpdateDebug m_last_gnss_pos_update_dbg{};
-  EskfGnssVelUpdateDebug m_last_gnss_vel_update_dbg{};
-  double m_last_gnss_pos_recover_inflate_dbg{1.0};
-  double m_last_gnss_vel_recover_inflate_dbg{1.0};
+  OdomBuilder odom_builder_;
+  GnssUpdateHandler gnss_update_handler_;
+  geometry_msgs::msg::Vector3 last_omega_base_{};
+  bool have_last_omega_base_{false};
+  EskfGnssPosUpdateDebug last_gnss_pos_update_dbg_{};
+  EskfGnssVelUpdateDebug last_gnss_vel_update_dbg_{};
+  double last_gnss_pos_recover_inflate_dbg_{1.0};
+  double last_gnss_vel_recover_inflate_dbg_{1.0};
 
   // ---- GNSS recover state -------------------------------------------------
-  mutable std::mutex m_gnss_recover_mutex_;
-  int m_prev_gnss_status_{std::numeric_limits<int>::min()};
-  bool m_gnss_recover_active_{false};
-  rclcpp::Time m_gnss_recover_holdoff_until_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time m_gnss_recover_pos_last_stamp_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time m_gnss_recover_vel_last_stamp_{0, 0, RCL_ROS_TIME};
-  double m_gnss_recover_pos_inflate_{1.0};
-  double m_gnss_recover_vel_inflate_{1.0};
-  rclcpp::Time m_gnss_env_pos_last_stamp_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time m_gnss_env_vel_last_stamp_{0, 0, RCL_ROS_TIME};
-  double m_gnss_env_pos_inflate_{1.0};
-  double m_gnss_env_vel_inflate_{1.0};
+  mutable std::mutex gnss_recover_mutex_;
+  int prev_gnss_status_{std::numeric_limits<int>::min()};
+  bool gnss_recover_active_{false};
+  rclcpp::Time gnss_recover_holdoff_until_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time gnss_recover_pos_last_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time gnss_recover_vel_last_stamp_{0, 0, RCL_ROS_TIME};
+  double gnss_recover_pos_inflate_{1.0};
+  double gnss_recover_vel_inflate_{1.0};
+  rclcpp::Time gnss_env_pos_last_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time gnss_env_vel_last_stamp_{0, 0, RCL_ROS_TIME};
+  double gnss_env_pos_inflate_{1.0};
+  double gnss_env_vel_inflate_{1.0};
 
-  mutable std::mutex m_heading_recover_mutex_;
-  int m_prev_heading_status_{std::numeric_limits<int>::min()};
-  rclcpp::Time m_heading_recover_holdoff_until_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time m_heading_recover_last_stamp_{0, 0, RCL_ROS_TIME};
-  double m_heading_recover_inflate_{1.0};
-  double m_heading_status_inflate_{1.0};
+  mutable std::mutex heading_recover_mutex_;
+  int prev_heading_status_{std::numeric_limits<int>::min()};
+  rclcpp::Time heading_recover_holdoff_until_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time heading_recover_last_stamp_{0, 0, RCL_ROS_TIME};
+  double heading_recover_inflate_{1.0};
+  double heading_status_inflate_{1.0};
 
   // ---- FGO Stage 2: KeyframeBuffer + ImuPreintegration --------------------
-  // m_state_mutex 로 보호 (ESKF 상태와 동일 뮤텍스)
-  KeyframeBuffer m_keyframe_buffer{20};
-  ImuPreintegration m_imu_preint{};    // 진행 중인 사전적분 (현재 ~ 다음 키프레임)
+  // state_mutex_ 로 보호 (ESKF 상태와 동일 뮤텍스)
+  KeyframeBuffer keyframe_buffer_{20};
+  ImuPreintegration imu_preint_{};    // 진행 중인 사전적분 (현재 ~ 다음 키프레임)
 
   // ---- FGO Stage 3: GTSAM ISAM2 FGO 백엔드 -------------------------------
-  FgoBackend m_fgo_backend;
+  FgoBackend fgo_backend_;
   // GTSAM IMU 사전적분 (키프레임 사이 raw IMU 누적, FgoBackend 와 공유 params 사용)
-  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements> m_gtsam_preint_;
+  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements> gtsam_preint_;
 
-  // 최신 FGO 용 GNSS 측정값 (m_state_mutex 보호)
-  std::optional<GnssMeasurement> m_latest_fgo_gnss_;
+  // 최신 FGO 용 GNSS 측정값 (state_mutex_ 보호)
+  std::optional<GnssMeasurement> latest_fgo_gnss_;
 
   // ---- FGO Stage 4: EskfCorrector + ImuBuffer ----------------------------
-  // ImuBuffer: cb_imu 에서 push, maybe_push_keyframe 에서 read (m_state_mutex 보호)
-  ImuBuffer m_imu_buffer_;
-  EskfCorrector m_eskf_corrector_;
+  // ImuBuffer: cb_imu 에서 push, maybe_push_keyframe 에서 read (state_mutex_ 보호)
+  ImuBuffer imu_buffer_;
+  EskfCorrector eskf_corrector_;
 
   // ---- FGO Stage 5: 진단 카운터 + 경로 시각화 ----------------------------
-  size_t m_fgo_correction_count_{0};   // 총 FGO 보정 적용 횟수
-  size_t m_fgo_keyframe_count_{0};     // 총 생성된 키프레임 수
-  // 키프레임 경로 (m_state_mutex 보호, maybe_push_keyframe 에서 갱신)
-  nav_msgs::msg::Path m_keyframe_path_;
+  size_t fgo_correction_count_{0};   // 총 FGO 보정 적용 횟수
+  size_t fgo_keyframe_count_{0};     // 총 생성된 키프레임 수
+  // 키프레임 경로 (state_mutex_ 보호, maybe_push_keyframe 에서 갱신)
+  nav_msgs::msg::Path keyframe_path_;
 
   // 키프레임 생성 후 내부 헬퍼
   void maybe_push_keyframe(

@@ -7,40 +7,40 @@ namespace hybrid_localization
 
 void GnssHeadingArbitrator::reset()
 {
-  m_latest_gnss_status = std::numeric_limits<int>::min();
-  m_latest_gnss_status_stamp_sec = std::numeric_limits<double>::quiet_NaN();
-  m_gphdt_holdoff_until_sec = 0.0;
+  latest_gnss_status_ = std::numeric_limits<int>::min();
+  latest_gnss_status_stamp_sec_ = std::numeric_limits<double>::quiet_NaN();
+  gphdt_holdoff_until_sec_ = 0.0;
 
-  m_have_gphdt = false;
-  m_gphdt_yaw_rad = std::numeric_limits<double>::quiet_NaN();
-  m_gphdt_yaw_var_rad2 = std::numeric_limits<double>::quiet_NaN();
-  m_gphdt_stamp_sec = std::numeric_limits<double>::quiet_NaN();
+  have_gphdt_ = false;
+  gphdt_yaw_rad_ = std::numeric_limits<double>::quiet_NaN();
+  gphdt_yaw_var_rad2_ = std::numeric_limits<double>::quiet_NaN();
+  gphdt_stamp_sec_ = std::numeric_limits<double>::quiet_NaN();
 }
 
 void GnssHeadingArbitrator::update_gnss_status(
   const int t_status,
   const double t_stamp_sec)
 {
-  const int prev = m_latest_gnss_status;
-  m_latest_gnss_status = t_status;
-  m_latest_gnss_status_stamp_sec = t_stamp_sec;
+  const int prev = latest_gnss_status_;
+  latest_gnss_status_ = t_status;
+  latest_gnss_status_stamp_sec_ = t_stamp_sec;
 
   // Hard safety: status < 0 is treated as outage/garbage. Clear candidates.
   if (t_status < 0) {
-    m_have_gphdt = false;
+    have_gphdt_ = false;
     return;
   }
 
   // Recovery hold-off: when transitioning from degraded (<1) to good (>=1),
   // delay usage of GPHDT for a short period.
-  if (m_params.gphdt_recover_holdoff_sec > 0.0 && is_finite(t_stamp_sec)) {
+  if (params_.gphdt_recover_holdoff_sec > 0.0 && is_finite(t_stamp_sec)) {
     const int min_status =
-      std::max(0, std::min(2, m_params.min_status_for_gphdt));
+      std::max(0, std::min(2, params_.min_status_for_gphdt));
     const bool prev_good = (prev >= min_status);
     const bool now_good = (t_status >= min_status);
     if (!prev_good && now_good) {
-      m_gphdt_holdoff_until_sec =
-        t_stamp_sec + std::max(0.0, m_params.gphdt_recover_holdoff_sec);
+      gphdt_holdoff_until_sec_ =
+        t_stamp_sec + std::max(0.0, params_.gphdt_recover_holdoff_sec);
     }
   }
 }
@@ -55,10 +55,10 @@ void GnssHeadingArbitrator::update_gphdt(
   {
     return;
   }
-  m_have_gphdt = true;
-  m_gphdt_yaw_rad = t_yaw_rad;
-  m_gphdt_yaw_var_rad2 = t_yaw_var_rad2;
-  m_gphdt_stamp_sec = t_stamp_sec;
+  have_gphdt_ = true;
+  gphdt_yaw_rad_ = t_yaw_rad;
+  gphdt_yaw_var_rad2_ = t_yaw_var_rad2;
+  gphdt_stamp_sec_ = t_stamp_sec;
 }
 
 bool GnssHeadingArbitrator::gphdt_sample_usable(
@@ -71,14 +71,14 @@ bool GnssHeadingArbitrator::gphdt_sample_usable(
   if (t_reason) {
     *t_reason = nullptr;
   }
-  if (m_latest_gnss_status < 0) {
+  if (latest_gnss_status_ < 0) {
     if (t_reason) {
       *t_reason = "gnss_status_neg1_skip";
     }
     return false;
   }
-  const int min_status = std::max(0, std::min(2, m_params.min_status_for_gphdt));
-  if (m_latest_gnss_status < min_status) {
+  const int min_status = std::max(0, std::min(2, params_.min_status_for_gphdt));
+  if (latest_gnss_status_ < min_status) {
     if (t_reason) {
       *t_reason = "gnss_status_skip";
     }
@@ -99,9 +99,9 @@ bool GnssHeadingArbitrator::gphdt_sample_usable(
     }
     return false;
   }
-  if (m_params.gphdt_recover_holdoff_sec > 0.0) {
-    if (t_now_sec < m_gphdt_holdoff_until_sec ||
-      t_stamp_sec < m_gphdt_holdoff_until_sec)
+  if (params_.gphdt_recover_holdoff_sec > 0.0) {
+    if (t_now_sec < gphdt_holdoff_until_sec_ ||
+      t_stamp_sec < gphdt_holdoff_until_sec_)
     {
       if (t_reason) {
         *t_reason = "heading_recover_holdoff";
@@ -119,7 +119,7 @@ bool GnssHeadingArbitrator::is_fresh(
   if (!is_finite(t_now_sec) || !is_finite(t_stamp_sec)) {
     return false;
   }
-  const double max_dt = std::max(0.0, m_params.max_time_diff_sec);
+  const double max_dt = std::max(0.0, params_.max_time_diff_sec);
   if (!(max_dt > 0.0)) {
     return true;
   }
@@ -134,43 +134,43 @@ bool GnssHeadingArbitrator::gphdt_usable(
   if (t_reason) {
     *t_reason = nullptr;
   }
-  if (m_latest_gnss_status < 0) {
+  if (latest_gnss_status_ < 0) {
     if (t_reason) {
       *t_reason = "gnss_status_neg1_skip";
     }
     return false;
   }
-  const int min_status = std::max(0, std::min(2, m_params.min_status_for_gphdt));
-  if (m_latest_gnss_status < min_status) {
+  const int min_status = std::max(0, std::min(2, params_.min_status_for_gphdt));
+  if (latest_gnss_status_ < min_status) {
     if (t_reason) {
       *t_reason = "gnss_status_skip";
     }
     return false;
   }
-  if (!m_have_gphdt) {
+  if (!have_gphdt_) {
     if (t_reason) {
       *t_reason = "heading_not_received";
     }
     return false;
   }
-  if (!is_finite(m_gphdt_yaw_rad) || !is_finite(m_gphdt_yaw_var_rad2) ||
-    !(m_gphdt_yaw_var_rad2 > 0.0))
+  if (!is_finite(gphdt_yaw_rad_) || !is_finite(gphdt_yaw_var_rad2_) ||
+    !(gphdt_yaw_var_rad2_ > 0.0))
   {
     if (t_reason) {
       *t_reason = "heading_non_finite";
     }
     return false;
   }
-  if (!is_fresh(t_now_sec, m_gphdt_stamp_sec)) {
+  if (!is_fresh(t_now_sec, gphdt_stamp_sec_)) {
     if (t_reason) {
       *t_reason = "heading_timeout";
     }
     return false;
   }
 
-  if (m_params.gphdt_recover_holdoff_sec > 0.0) {
-    if (t_now_sec < m_gphdt_holdoff_until_sec ||
-      m_gphdt_stamp_sec < m_gphdt_holdoff_until_sec)
+  if (params_.gphdt_recover_holdoff_sec > 0.0) {
+    if (t_now_sec < gphdt_holdoff_until_sec_ ||
+      gphdt_stamp_sec_ < gphdt_holdoff_until_sec_)
     {
       if (t_reason) {
         *t_reason = "heading_recover_holdoff";
@@ -189,9 +189,9 @@ GnssYawMeasurement GnssHeadingArbitrator::select(const double t_now_sec) const
   const char * reason = nullptr;
   if (gphdt_usable(t_now_sec, &reason)) {
     out.source = GnssHeadingSource::kGphdt;
-    out.yaw_rad = m_gphdt_yaw_rad;
-    out.yaw_var_rad2 = m_gphdt_yaw_var_rad2;
-    out.stamp_sec = m_gphdt_stamp_sec;
+    out.yaw_rad = gphdt_yaw_rad_;
+    out.yaw_var_rad2 = gphdt_yaw_var_rad2_;
+    out.stamp_sec = gphdt_stamp_sec_;
     return out;
   }
 

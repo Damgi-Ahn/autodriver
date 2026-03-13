@@ -124,25 +124,25 @@ void HybridLocalizationNode::update_gnss_recover_state(
   const int curr_status,
   const rclcpp::Time & stamp)
 {
-  const auto & recover = m_node_params.gnss.recover;
+  const auto & recover = node_params_.gnss.recover;
 
-  std::scoped_lock<std::mutex> lock(m_gnss_recover_mutex_);
-  const int prev = m_prev_gnss_status_;
-  m_prev_gnss_status_ = curr_status;
+  std::scoped_lock<std::mutex> lock(gnss_recover_mutex_);
+  const int prev = prev_gnss_status_;
+  prev_gnss_status_ = curr_status;
 
   if (!recover.enable) {
-    m_gnss_recover_active_ = false;
-    m_gnss_recover_holdoff_until_ = stamp;
-    m_gnss_recover_pos_last_stamp_ = stamp;
-    m_gnss_recover_vel_last_stamp_ = stamp;
-    m_gnss_recover_pos_inflate_ = 1.0;
-    m_gnss_recover_vel_inflate_ = 1.0;
+    gnss_recover_active_ = false;
+    gnss_recover_holdoff_until_ = stamp;
+    gnss_recover_pos_last_stamp_ = stamp;
+    gnss_recover_vel_last_stamp_ = stamp;
+    gnss_recover_pos_inflate_ = 1.0;
+    gnss_recover_vel_inflate_ = 1.0;
     return;
   }
 
   if (prev == std::numeric_limits<int>::min()) {
-    m_gnss_recover_pos_last_stamp_ = stamp;
-    m_gnss_recover_vel_last_stamp_ = stamp;
+    gnss_recover_pos_last_stamp_ = stamp;
+    gnss_recover_vel_last_stamp_ = stamp;
     return;
   }
 
@@ -154,22 +154,22 @@ void HybridLocalizationNode::update_gnss_recover_state(
 
   const double holdoff_sec = std::max(0.0, recover.holdoff_sec);
   const double ramp_sec = std::max(0.0, recover.ramp_sec);
-  m_gnss_recover_active_ = (holdoff_sec > 0.0) || (ramp_sec > 0.0);
-  m_gnss_recover_holdoff_until_ =
+  gnss_recover_active_ = (holdoff_sec > 0.0) || (ramp_sec > 0.0);
+  gnss_recover_holdoff_until_ =
     stamp + rclcpp::Duration::from_seconds(holdoff_sec);
-  m_gnss_recover_pos_last_stamp_ = stamp;
-  m_gnss_recover_vel_last_stamp_ = stamp;
+  gnss_recover_pos_last_stamp_ = stamp;
+  gnss_recover_vel_last_stamp_ = stamp;
 
   const double pos_peak = recover_peak_from_transition(
-    position_status_inflate(m_node_params.gnss, prev),
-    position_status_inflate(m_node_params.gnss, curr_status),
+    position_status_inflate(node_params_.gnss, prev),
+    position_status_inflate(node_params_.gnss, curr_status),
     recover.pos_max_inflate);
   const double vel_peak = recover_peak_from_transition(
-    velocity_status_inflate(m_node_params.gnss, prev),
-    velocity_status_inflate(m_node_params.gnss, curr_status),
+    velocity_status_inflate(node_params_.gnss, prev),
+    velocity_status_inflate(node_params_.gnss, curr_status),
     recover.vel_max_inflate);
-  m_gnss_recover_pos_inflate_ = std::max(m_gnss_recover_pos_inflate_, pos_peak);
-  m_gnss_recover_vel_inflate_ = std::max(m_gnss_recover_vel_inflate_, vel_peak);
+  gnss_recover_pos_inflate_ = std::max(gnss_recover_pos_inflate_, pos_peak);
+  gnss_recover_vel_inflate_ = std::max(gnss_recover_vel_inflate_, vel_peak);
 }
 
 bool HybridLocalizationNode::compute_gnss_recover_inflate(
@@ -181,29 +181,29 @@ bool HybridLocalizationNode::compute_gnss_recover_inflate(
   skip_update = false;
   out_inflate = 1.0;
 
-  const auto & recover = m_node_params.gnss.recover;
+  const auto & recover = node_params_.gnss.recover;
   if (!recover.enable) {
     return false;
   }
 
-  std::scoped_lock<std::mutex> lock(m_gnss_recover_mutex_);
-  if (!m_gnss_recover_active_) {
+  std::scoped_lock<std::mutex> lock(gnss_recover_mutex_);
+  if (!gnss_recover_active_) {
     return false;
   }
 
   double & inflate_state = (channel == GnssRecoverChannel::kPosition) ?
-    m_gnss_recover_pos_inflate_ :
-    m_gnss_recover_vel_inflate_;
+    gnss_recover_pos_inflate_ :
+    gnss_recover_vel_inflate_;
   rclcpp::Time & last_stamp = (channel == GnssRecoverChannel::kPosition) ?
-    m_gnss_recover_pos_last_stamp_ :
-    m_gnss_recover_vel_last_stamp_;
+    gnss_recover_pos_last_stamp_ :
+    gnss_recover_vel_last_stamp_;
   inflate_state = sanitize_inflate(inflate_state);
   if (inflate_state < 1.0) {
     inflate_state = 1.0;
   }
 
   // Holdoff window: skip updates entirely.
-  if (stamp < m_gnss_recover_holdoff_until_) {
+  if (stamp < gnss_recover_holdoff_until_) {
     skip_update = true;
     out_inflate = inflate_state;
     return true;
@@ -235,14 +235,14 @@ bool HybridLocalizationNode::compute_gnss_recover_inflate(
     out_inflate = 1.0;
   }
 
-  if (stamp >= m_gnss_recover_holdoff_until_) {
+  if (stamp >= gnss_recover_holdoff_until_) {
     constexpr double kDeactivateEps = 1e-3;
-    if (m_gnss_recover_pos_inflate_ <= (1.0 + kDeactivateEps) &&
-      m_gnss_recover_vel_inflate_ <= (1.0 + kDeactivateEps))
+    if (gnss_recover_pos_inflate_ <= (1.0 + kDeactivateEps) &&
+      gnss_recover_vel_inflate_ <= (1.0 + kDeactivateEps))
     {
-      m_gnss_recover_active_ = false;
-      m_gnss_recover_pos_inflate_ = 1.0;
-      m_gnss_recover_vel_inflate_ = 1.0;
+      gnss_recover_active_ = false;
+      gnss_recover_pos_inflate_ = 1.0;
+      gnss_recover_vel_inflate_ = 1.0;
     }
   }
   return true;
@@ -255,13 +255,13 @@ double HybridLocalizationNode::apply_gnss_inflate_envelope(
 {
   const double target = std::max(1.0, sanitize_inflate(target_inflate));
 
-  std::scoped_lock<std::mutex> lock(m_gnss_recover_mutex_);
+  std::scoped_lock<std::mutex> lock(gnss_recover_mutex_);
   double & inflate_state = (channel == GnssRecoverChannel::kPosition) ?
-    m_gnss_env_pos_inflate_ :
-    m_gnss_env_vel_inflate_;
+    gnss_env_pos_inflate_ :
+    gnss_env_vel_inflate_;
   rclcpp::Time & last_stamp = (channel == GnssRecoverChannel::kPosition) ?
-    m_gnss_env_pos_last_stamp_ :
-    m_gnss_env_vel_last_stamp_;
+    gnss_env_pos_last_stamp_ :
+    gnss_env_vel_last_stamp_;
 
   inflate_state = std::max(1.0, sanitize_inflate(inflate_state));
 
@@ -276,7 +276,7 @@ double HybridLocalizationNode::apply_gnss_inflate_envelope(
     return inflate_state;
   }
 
-  const double ramp_sec = std::max(0.0, m_node_params.gnss.recover.ramp_sec);
+  const double ramp_sec = std::max(0.0, node_params_.gnss.recover.ramp_sec);
   if (!(ramp_sec > 0.0)) {
     inflate_state = target;
     return inflate_state;
@@ -304,24 +304,24 @@ void HybridLocalizationNode::update_heading_recover_state(
   const int curr_status,
   const rclcpp::Time & stamp)
 {
-  std::scoped_lock<std::mutex> lock(m_heading_recover_mutex_);
-  const int prev = m_prev_heading_status_;
-  m_prev_heading_status_ = curr_status;
+  std::scoped_lock<std::mutex> lock(heading_recover_mutex_);
+  const int prev = prev_heading_status_;
+  prev_heading_status_ = curr_status;
 
   const double curr_status_inflate =
-    heading_status_inflate(m_node_params.gnss, curr_status);
-  m_heading_status_inflate_ = std::max(1.0, sanitize_inflate(curr_status_inflate));
+    heading_status_inflate(node_params_.gnss, curr_status);
+  heading_status_inflate_ = std::max(1.0, sanitize_inflate(curr_status_inflate));
 
   if (prev == std::numeric_limits<int>::min()) {
-    m_heading_recover_last_stamp_ = stamp;
+    heading_recover_last_stamp_ = stamp;
     return;
   }
 
   const double prev_status_inflate =
-    heading_status_inflate(m_node_params.gnss, prev);
+    heading_status_inflate(node_params_.gnss, prev);
 
   const int min_status =
-    std::max(0, std::min(2, m_node_params.gnss.min_status_for_yaw_update));
+    std::max(0, std::min(2, node_params_.gnss.min_status_for_yaw_update));
   const bool prev_good = (prev >= min_status);
   const bool now_good = (curr_status >= min_status);
   if (prev_good || !now_good || !(curr_status > prev)) {
@@ -330,16 +330,16 @@ void HybridLocalizationNode::update_heading_recover_state(
 
   // Keep high uncertainty while heading source is in post-recovery holdoff.
   const double holdoff_sec =
-    std::max(0.0, m_node_params.heading_arbitrator.gphdt_recover_holdoff_sec);
-  m_heading_recover_holdoff_until_ =
+    std::max(0.0, node_params_.heading_arbitrator.gphdt_recover_holdoff_sec);
+  heading_recover_holdoff_until_ =
     stamp + rclcpp::Duration::from_seconds(holdoff_sec);
-  m_heading_recover_last_stamp_ = stamp;
+  heading_recover_last_stamp_ = stamp;
 
   const double peak = recover_peak_from_transition(
     prev_status_inflate,
     curr_status_inflate,
     std::max(4.0, prev_status_inflate));
-  m_heading_recover_inflate_ = std::max(m_heading_recover_inflate_, peak);
+  heading_recover_inflate_ = std::max(heading_recover_inflate_, peak);
 }
 
 void HybridLocalizationNode::raise_heading_recover_inflate(
@@ -350,10 +350,10 @@ void HybridLocalizationNode::raise_heading_recover_inflate(
   if (!(peak > 1.0)) {
     return;
   }
-  std::scoped_lock<std::mutex> lock(m_heading_recover_mutex_);
-  m_heading_recover_inflate_ = std::max(m_heading_recover_inflate_, peak);
-  if (m_heading_recover_last_stamp_.nanoseconds() <= 0) {
-    m_heading_recover_last_stamp_ = stamp;
+  std::scoped_lock<std::mutex> lock(heading_recover_mutex_);
+  heading_recover_inflate_ = std::max(heading_recover_inflate_, peak);
+  if (heading_recover_last_stamp_.nanoseconds() <= 0) {
+    heading_recover_last_stamp_ = stamp;
   }
 }
 
@@ -362,75 +362,75 @@ double HybridLocalizationNode::compute_heading_measurement_inflate(
   double * status_inflate,
   double * recover_inflate)
 {
-  std::scoped_lock<std::mutex> lock(m_heading_recover_mutex_);
-  m_heading_status_inflate_ = std::max(1.0, sanitize_inflate(m_heading_status_inflate_));
-  m_heading_recover_inflate_ = std::max(1.0, sanitize_inflate(m_heading_recover_inflate_));
+  std::scoped_lock<std::mutex> lock(heading_recover_mutex_);
+  heading_status_inflate_ = std::max(1.0, sanitize_inflate(heading_status_inflate_));
+  heading_recover_inflate_ = std::max(1.0, sanitize_inflate(heading_recover_inflate_));
 
   double dt_sec = 0.0;
-  if (m_heading_recover_last_stamp_.nanoseconds() > 0 && stamp > m_heading_recover_last_stamp_) {
-    dt_sec = (stamp - m_heading_recover_last_stamp_).seconds();
+  if (heading_recover_last_stamp_.nanoseconds() > 0 && stamp > heading_recover_last_stamp_) {
+    dt_sec = (stamp - heading_recover_last_stamp_).seconds();
   }
-  m_heading_recover_last_stamp_ = stamp;
+  heading_recover_last_stamp_ = stamp;
 
-  if (stamp >= m_heading_recover_holdoff_until_) {
-    const double ramp_sec = std::max(0.0, m_node_params.gnss.recover.ramp_sec);
-    if (ramp_sec > 0.0 && dt_sec > 0.0 && m_heading_recover_inflate_ > 1.0) {
+  if (stamp >= heading_recover_holdoff_until_) {
+    const double ramp_sec = std::max(0.0, node_params_.gnss.recover.ramp_sec);
+    if (ramp_sec > 0.0 && dt_sec > 0.0 && heading_recover_inflate_ > 1.0) {
       constexpr double kDecayAtRampSec = 5.0;  // exp(-5) ~= 0.0067
       const double tau_sec = ramp_sec / kDecayAtRampSec;
       if (tau_sec > 0.0) {
-        m_heading_recover_inflate_ =
-          1.0 + (m_heading_recover_inflate_ - 1.0) * std::exp(-dt_sec / tau_sec);
+        heading_recover_inflate_ =
+          1.0 + (heading_recover_inflate_ - 1.0) * std::exp(-dt_sec / tau_sec);
       }
     } else if (!(ramp_sec > 0.0)) {
-      m_heading_recover_inflate_ = 1.0;
+      heading_recover_inflate_ = 1.0;
     }
   }
 
-  if (!std::isfinite(m_heading_recover_inflate_) || !(m_heading_recover_inflate_ >= 1.0)) {
-    m_heading_recover_inflate_ = 1.0;
+  if (!std::isfinite(heading_recover_inflate_) || !(heading_recover_inflate_ >= 1.0)) {
+    heading_recover_inflate_ = 1.0;
   }
 
   if (status_inflate != nullptr) {
-    *status_inflate = m_heading_status_inflate_;
+    *status_inflate = heading_status_inflate_;
   }
   if (recover_inflate != nullptr) {
-    *recover_inflate = m_heading_recover_inflate_;
+    *recover_inflate = heading_recover_inflate_;
   }
-  return m_heading_status_inflate_ * m_heading_recover_inflate_;
+  return heading_status_inflate_ * heading_recover_inflate_;
 }
 
 void HybridLocalizationNode::gnss_callback(
   const sensor_msgs::msg::NavSatFix::SharedPtr t_msg)
 {
-  const bool activated = (!m_node_params.init.require_trigger) || m_is_activated_;
+  const bool activated = (!node_params_.init.require_trigger) || is_activated_;
 
   const rclcpp::Time current_stamp(t_msg->header.stamp);
   const rclcpp::Time now = this->now();
-  if (!validate_stamp_and_order(current_stamp, now, m_last_gnss_stamp, "GNSS")) {
+  if (!validate_stamp_and_order(current_stamp, now, last_gnss_stamp_, "GNSS")) {
     return;
   }
   // GNSS 외란 보정을 위한 base↔gnss extrinsic 확보
-  if (!m_tf_cache.extrinsics().gnss_valid && !t_msg->header.frame_id.empty()) {
-    m_tf_cache.cache_gnss_from_frame_id(t_msg->header.frame_id, this->get_logger());
+  if (!tf_cache_.extrinsics().gnss_valid && !t_msg->header.frame_id.empty()) {
+    tf_cache_.cache_gnss_from_frame_id(t_msg->header.frame_id, this->get_logger());
   }
-  const auto & io = m_node_params.io;
-  const auto & gnss_params = m_node_params.gnss;
-  const bool is_first_gnss = (m_gnss_count == 0);
-  m_latest_gnss = t_msg;
-  m_last_gnss_stamp = current_stamp;
-  m_gnss_count++;
+  const auto & io = node_params_.io;
+  const auto & gnss_params = node_params_.gnss;
+  const bool is_first_gnss = (gnss_count_ == 0);
+  latest_gnss_ = t_msg;
+  last_gnss_stamp_ = current_stamp;
+  gnss_count_++;
   const int gnss_status = static_cast<int>(t_msg->status.status);
   update_gnss_recover_state(gnss_status, current_stamp);
   update_heading_recover_state(gnss_status, current_stamp);
   {
-    std::scoped_lock<std::mutex> lock(m_heading_arbitrator_mutex);
-    m_heading_arbitrator.update_gnss_status(gnss_status, current_stamp.seconds());
+    std::scoped_lock<std::mutex> lock(heading_arbitrator_mutex_);
+    heading_arbitrator_.update_gnss_status(gnss_status, current_stamp.seconds());
   }
   // GNSS status 기반 하드 게이팅
   if (gnss_status < gnss_params.min_status_for_pos_update) {
-    m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-    m_last_gnss_pos_update_dbg.reason = "gnss_status_skip";
-    m_last_gnss_pos_recover_inflate_dbg = 1.0;
+    last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+    last_gnss_pos_update_dbg_.reason = "gnss_status_skip";
+    last_gnss_pos_recover_inflate_dbg_ = 1.0;
     RCLCPP_WARN_THROTTLE(
       this->get_logger(),
       *this->get_clock(), 2000, "GNSS: status=%d < min_status_for_pos_update=%d. Skipping init/update.", gnss_status,
@@ -441,20 +441,20 @@ void HybridLocalizationNode::gnss_callback(
   // NOTE: Even when deactivated, keep publishing GNSS debug outputs.
   // Filter state init/update is gated later by `activated`.
   // 위경도 → map 좌표 투영 (맵 정보가 준비된 경우)
-  if (m_map_projector.valid()) {
+  if (map_projector_.valid()) {
     double yaw_for_gnss_lever_arm = std::numeric_limits<double>::quiet_NaN();
     bool eskf_initialized = false;
     {
-      std::scoped_lock<std::mutex> lock(m_state_mutex);
-      if (m_eskf.initialized()) {
+      std::scoped_lock<std::mutex> lock(state_mutex_);
+      if (eskf_.initialized()) {
         eskf_initialized = true;
-        const Eigen::Matrix3d R = m_eskf.q_map_from_base().toRotationMatrix();
+        const Eigen::Matrix3d R = eskf_.q_map_from_base().toRotationMatrix();
         yaw_for_gnss_lever_arm = std::atan2(R(1, 0), R(0, 0));
       }
     }
     if (!eskf_initialized) {
-      std::scoped_lock<std::mutex> lock(m_heading_arbitrator_mutex);
-      const auto yaw_sel = m_heading_arbitrator.select(current_stamp.seconds());
+      std::scoped_lock<std::mutex> lock(heading_arbitrator_mutex_);
+      const auto yaw_sel = heading_arbitrator_.select(current_stamp.seconds());
       if (yaw_sel.source != GnssHeadingSource::kNone &&
         std::isfinite(yaw_sel.yaw_rad))
       {
@@ -465,8 +465,8 @@ void HybridLocalizationNode::gnss_callback(
       yaw_for_gnss_lever_arm = 0.0;
     }
     GnssPreprocessResult gnss_result;
-    const auto status = m_gnss_preprocessor.preprocess(
-      *t_msg, m_map_projector, m_tf_cache.extrinsics(),
+    const auto status = gnss_preprocessor_.preprocess(
+      *t_msg, map_projector_, tf_cache_.extrinsics(),
       yaw_for_gnss_lever_arm, gnss_result);
     if (status == GnssPreprocessStatus::kNoFix) {
       RCLCPP_WARN_THROTTLE(
@@ -513,8 +513,8 @@ void HybridLocalizationNode::gnss_callback(
         gnss_odom.pose.pose.position.z = gnss_result.base_position_map.z;
 
         // GNSS-only 시각화를 위한 yaw 적용 (가능한 경우)
-        if (m_heading_received && std::isfinite(m_latest_heading_yaw_rad)) {
-          const Eigen::AngleAxisd yaw_aa(m_latest_heading_yaw_rad,
+        if (heading_received_ && std::isfinite(latest_heading_yaw_rad_)) {
+          const Eigen::AngleAxisd yaw_aa(latest_heading_yaw_rad_,
             Eigen::Vector3d::UnitZ());
           const Eigen::Quaterniond q(yaw_aa);
           gnss_odom.pose.pose.orientation.x = q.x();
@@ -536,11 +536,11 @@ void HybridLocalizationNode::gnss_callback(
           gnss_odom.pose.covariance[7] = gnss_params.pos_var_fallback;
           gnss_odom.pose.covariance[14] = gnss_params.pos_var_fallback;
         }
-        m_gnss_odom_pub->publish(gnss_odom);
+        gnss_odom_pub_->publish(gnss_odom);
       }
 
       // Optional: publish GNSS-derived pose for pose_initializer (Case B).
-      if (gnss_params.publish_pose_with_covariance && m_gnss_pose_cov_pub) {
+      if (gnss_params.publish_pose_with_covariance && gnss_pose_cov_pub_) {
         geometry_msgs::msg::PoseWithCovarianceStamped pose_cov;
         pose_cov.header.stamp = t_msg->header.stamp;
         pose_cov.header.frame_id = io.map_frame;
@@ -553,8 +553,8 @@ void HybridLocalizationNode::gnss_callback(
         pose_cov.pose.pose.position.z = p.z;
 
         // If heading is available, add yaw for better initial guess. Otherwise, identity.
-        if (m_heading_received && std::isfinite(m_latest_heading_yaw_rad)) {
-          const Eigen::AngleAxisd yaw_aa(m_latest_heading_yaw_rad,
+        if (heading_received_ && std::isfinite(latest_heading_yaw_rad_)) {
+          const Eigen::AngleAxisd yaw_aa(latest_heading_yaw_rad_,
             Eigen::Vector3d::UnitZ());
           const Eigen::Quaterniond q(yaw_aa);
           pose_cov.pose.pose.orientation.x = q.x();
@@ -583,25 +583,25 @@ void HybridLocalizationNode::gnss_callback(
         }
         // Set a large yaw variance if we don't have a heading source.
         pose_cov.pose.covariance[35] =
-          (m_heading_received && std::isfinite(m_latest_heading_yaw_rad)) ?
-          m_node_params.heading.yaw_var :
+          (heading_received_ && std::isfinite(latest_heading_yaw_rad_)) ?
+          node_params_.heading.yaw_var :
           1.0e6;
 
-        m_gnss_pose_cov_pub->publish(pose_cov);
+        gnss_pose_cov_pub_->publish(pose_cov);
       }
 
       GnssYawMeasurement yaw_sel;
       {
-        std::scoped_lock<std::mutex> lock(m_heading_arbitrator_mutex);
-        yaw_sel = m_heading_arbitrator.select(current_stamp.seconds());
+        std::scoped_lock<std::mutex> lock(heading_arbitrator_mutex_);
+        yaw_sel = heading_arbitrator_.select(current_stamp.seconds());
       }
 
       {
-        std::scoped_lock<std::mutex> lock(m_state_mutex);
+        std::scoped_lock<std::mutex> lock(state_mutex_);
 
         if (!activated) {
-          m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-          m_last_gnss_pos_update_dbg.reason = "not_activated";
+          last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+          last_gnss_pos_update_dbg_.reason = "not_activated";
           return;
         }
 
@@ -610,16 +610,16 @@ void HybridLocalizationNode::gnss_callback(
           gnss_result.base_position_map.z);
 
         // 초기화: GNSS 위치를 캐시하고 신뢰 가능한 yaw 확보 후 시작
-        if (!m_eskf.initialized()) {
-          if (m_use_external_initialpose_) {
-            m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-            m_last_gnss_pos_update_dbg.reason = "external_initialpose_mode";
+        if (!eskf_.initialized()) {
+          if (use_external_initialpose_) {
+            last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+            last_gnss_pos_update_dbg_.reason = "external_initialpose_mode";
             return;
           }
 
-          m_pending_init_position = true;
-          m_pending_init_p_map = z_p_map;
-          m_pending_init_stamp = current_stamp;
+          pending_init_position_ = true;
+          pending_init_p_map_ = z_p_map;
+          pending_init_stamp_ = current_stamp;
 
           double yaw_init = std::numeric_limits<double>::quiet_NaN();
           const char * yaw_source = "Unknown";
@@ -629,15 +629,15 @@ void HybridLocalizationNode::gnss_callback(
           }
 
           if (!std::isfinite(yaw_init)) {
-            m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-            m_last_gnss_pos_update_dbg.reason = "wait_yaw_for_init";
+            last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+            last_gnss_pos_update_dbg_.reason = "wait_yaw_for_init";
           } else {
             const Eigen::AngleAxisd yaw_aa(yaw_init, Eigen::Vector3d::UnitZ());
             const Eigen::Quaterniond q_init(yaw_aa);
-            m_eskf.initialize(z_p_map, q_init);
-            m_eskf_init_stamp_ = current_stamp;
-            m_state_stamp = std::max(current_stamp, m_state_stamp);
-            m_pending_init_position = false;
+            eskf_.initialize(z_p_map, q_init);
+            eskf_init_stamp_ = current_stamp;
+            state_stamp_ = std::max(current_stamp, state_stamp_);
+            pending_init_position_ = false;
             RCLCPP_INFO(
               this->get_logger(), "ESKF initialized from GNSS+%s (p=[%.3f, %.3f, %.3f], " "yaw=%.3f rad)", yaw_source,
               z_p_map.x(), z_p_map.y(), z_p_map.z(), yaw_init);
@@ -645,17 +645,17 @@ void HybridLocalizationNode::gnss_callback(
         } else if (gnss_params.enable_gnss_pos_update) {
           // GNSS 위치 업데이트 경로
           const auto tol = rclcpp::Duration::from_seconds(
-            std::max(0.0, m_node_params.time_alignment_tolerance_sec));
-          if (m_state_stamp.seconds() > 0.0 &&
-            (current_stamp + tol) < m_state_stamp)
+            std::max(0.0, node_params_.time_alignment_tolerance_sec));
+          if (state_stamp_.seconds() > 0.0 &&
+            (current_stamp + tol) < state_stamp_)
           {
-            m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-            m_last_gnss_pos_update_dbg.reason = "time_alignment";
+            last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+            last_gnss_pos_update_dbg_.reason = "time_alignment";
             RCLCPP_WARN_THROTTLE(
               this->get_logger(),
               *this->get_clock(), 2000, "GNSS: stamp is older than ESKF state (gnss=%.6f, state=%.6f). " "Skipping position update (no time alignment, tol=%.3fms).",
-              current_stamp.seconds(), m_state_stamp.seconds(),
-              std::max(0.0, m_node_params.time_alignment_tolerance_sec) * 1000.0);
+              current_stamp.seconds(), state_stamp_.seconds(),
+              std::max(0.0, node_params_.time_alignment_tolerance_sec) * 1000.0);
           } else {
             double status_inflate = 1.0;
             if (gnss_status == 0) {
@@ -680,10 +680,10 @@ void HybridLocalizationNode::gnss_callback(
             const double target_inflate = status_inflate * recover_inflate;
             const double effective_inflate = apply_gnss_inflate_envelope(
               GnssRecoverChannel::kPosition, current_stamp, target_inflate);
-            m_last_gnss_pos_recover_inflate_dbg = effective_inflate;
+            last_gnss_pos_recover_inflate_dbg_ = effective_inflate;
             if (recover_skip) {
-              m_last_gnss_pos_update_dbg = EskfGnssPosUpdateDebug{};
-              m_last_gnss_pos_update_dbg.reason = "recover_holdoff";
+              last_gnss_pos_update_dbg_ = EskfGnssPosUpdateDebug{};
+              last_gnss_pos_update_dbg_.reason = "recover_holdoff";
               return;
             }
 
@@ -696,12 +696,12 @@ void HybridLocalizationNode::gnss_callback(
             config.pos_var_max = gnss_params.pos_var_max;
             config.cov_diag_only = gnss_params.pos_cov_diag_only;
 
-            m_last_gnss_pos_update_dbg =
-              m_gnss_update_handler.apply_position_update(
-              m_eskf, z_p_map,
+            last_gnss_pos_update_dbg_ =
+              gnss_update_handler_.apply_position_update(
+              eskf_, z_p_map,
               *t_msg, config);
-            if (current_stamp > m_state_stamp) {
-              m_state_stamp = current_stamp;
+            if (current_stamp > state_stamp_) {
+              state_stamp_ = current_stamp;
             }
 
             // FGO Stage 3: 위치 측정값 캐시 (키프레임 생성 시 소비됨)
@@ -726,13 +726,13 @@ void HybridLocalizationNode::gnss_callback(
               }
 
               // 이미 heading이 있으면 추가
-              if (m_heading_received) {
+              if (heading_received_) {
                 fgo_gnss.has_heading = true;
-                fgo_gnss.heading_rad = m_latest_heading_yaw_rad;
-                fgo_gnss.heading_var = m_node_params.heading.yaw_var;
+                fgo_gnss.heading_rad = latest_heading_yaw_rad_;
+                fgo_gnss.heading_var = node_params_.heading.yaw_var;
               }
 
-              m_latest_fgo_gnss_ = fgo_gnss;
+              latest_fgo_gnss_ = fgo_gnss;
             }
           }
         }
@@ -746,7 +746,7 @@ void HybridLocalizationNode::gnss_vel_callback(
 {
   const rclcpp::Time current_stamp(t_msg->header.stamp);
   const rclcpp::Time now = this->now();
-  if (!validate_stamp_and_order(current_stamp, now, m_last_gnss_vel_stamp, "GNSS_VEL")) {
+  if (!validate_stamp_and_order(current_stamp, now, last_gnss_vel_stamp_, "GNSS_VEL")) {
     return;
   }
 
@@ -764,27 +764,27 @@ void HybridLocalizationNode::gnss_vel_callback(
   velocity_msg.lateral_velocity = 0.0f;
   velocity_msg.heading_rate = 0.0f;
 
-  m_gnss_velocity_pub->publish(velocity_msg);
+  gnss_velocity_pub_->publish(velocity_msg);
 
   // GNSS 속도 업데이트 (vn/ve/vu 사용)
-  if (m_node_params.gnss.enable_gnss_vel_update) {
-    const auto latest_gnss = m_latest_gnss;
+  if (node_params_.gnss.enable_gnss_vel_update) {
+    const auto latest_gnss = latest_gnss_;
     if (!latest_gnss) {
-      m_last_gnss_vel_update_dbg = EskfGnssVelUpdateDebug{};
-      m_last_gnss_vel_update_dbg.reason = "gnss_status_skip";
-      m_last_gnss_vel_recover_inflate_dbg = 1.0;
+      last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
+      last_gnss_vel_update_dbg_.reason = "gnss_status_skip";
+      last_gnss_vel_recover_inflate_dbg_ = 1.0;
     } else {
       const int gnss_status = static_cast<int>(latest_gnss->status.status);
       if (gnss_status < 0) {
-        m_last_gnss_vel_update_dbg = EskfGnssVelUpdateDebug{};
-        m_last_gnss_vel_update_dbg.reason = "gnss_status_skip";
-        m_last_gnss_vel_recover_inflate_dbg = 1.0;
+        last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
+        last_gnss_vel_update_dbg_.reason = "gnss_status_skip";
+        last_gnss_vel_recover_inflate_dbg_ = 1.0;
       } else {
         double status_inflate = 1.0;
         if (gnss_status == 0) {
-          status_inflate = m_node_params.gnss.vel_inflate_status_fix;
+          status_inflate = node_params_.gnss.vel_inflate_status_fix;
         } else if (gnss_status == 1) {
-          status_inflate = m_node_params.gnss.vel_inflate_status_sbas;
+          status_inflate = node_params_.gnss.vel_inflate_status_sbas;
         } else {
           status_inflate = 1.0;
         }
@@ -792,9 +792,9 @@ void HybridLocalizationNode::gnss_vel_callback(
           status_inflate = 1.0;
         }
 
-        std::scoped_lock<std::mutex> lock(m_state_mutex);
+        std::scoped_lock<std::mutex> lock(state_mutex_);
 
-        if (m_eskf.initialized()) {
+        if (eskf_.initialized()) {
           const double target_inflate = status_inflate;
           bool recover_skip = false;
           double recover_inflate = 1.0;
@@ -807,69 +807,69 @@ void HybridLocalizationNode::gnss_vel_callback(
           const double effective_inflate = apply_gnss_inflate_envelope(
             GnssRecoverChannel::kVelocity, current_stamp,
             target_inflate * recover_inflate);
-          m_last_gnss_vel_recover_inflate_dbg = effective_inflate;
+          last_gnss_vel_recover_inflate_dbg_ = effective_inflate;
           if (recover_skip) {
-            m_last_gnss_vel_update_dbg = EskfGnssVelUpdateDebug{};
-            m_last_gnss_vel_update_dbg.reason = "recover_holdoff";
+            last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
+            last_gnss_vel_update_dbg_.reason = "recover_holdoff";
             // Skip velocity update during recovery holdoff window.
           } else {
           const auto tol = rclcpp::Duration::from_seconds(
-            std::max(0.0, m_node_params.time_alignment_tolerance_sec));
-          if (m_state_stamp.seconds() > 0.0 &&
-            (current_stamp + tol) < m_state_stamp)
+            std::max(0.0, node_params_.time_alignment_tolerance_sec));
+          if (state_stamp_.seconds() > 0.0 &&
+            (current_stamp + tol) < state_stamp_)
           {
-            m_last_gnss_vel_update_dbg = EskfGnssVelUpdateDebug{};
-            m_last_gnss_vel_update_dbg.reason = "time_alignment";
+            last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
+            last_gnss_vel_update_dbg_.reason = "time_alignment";
             RCLCPP_WARN_THROTTLE(
               this->get_logger(),
               *this->get_clock(), 2000, "GNSS_VEL: stamp is older than ESKF state (vel=%.6f, state=%.6f). " "Skipping velocity update (no time alignment, tol=%.3fms).",
-              current_stamp.seconds(), m_state_stamp.seconds(),
-              std::max(0.0, m_node_params.time_alignment_tolerance_sec) * 1000.0);
+              current_stamp.seconds(), state_stamp_.seconds(),
+              std::max(0.0, node_params_.time_alignment_tolerance_sec) * 1000.0);
           } else if (!std::isfinite(vn) || !std::isfinite(ve))
           {
-            m_last_gnss_vel_update_dbg = EskfGnssVelUpdateDebug{};
-            m_last_gnss_vel_update_dbg.reason = "non_finite_measurement";
+            last_gnss_vel_update_dbg_ = EskfGnssVelUpdateDebug{};
+            last_gnss_vel_update_dbg_.reason = "non_finite_measurement";
             RCLCPP_WARN_THROTTLE(
               this->get_logger(),
               *this->get_clock(), 2000, "GNSS_VEL: non-finite velocity (vn/ve), skipping");
           } else {
             Eigen::Vector3d z_v_map(ve, vn, kVuAssumed);
 
-            if (m_tf_cache.extrinsics().gnss_valid && m_have_last_omega_base) {
-              const Eigen::Vector3d omega_base(m_last_omega_base.x,
-                m_last_omega_base.y,
-                m_last_omega_base.z);
+            if (tf_cache_.extrinsics().gnss_valid && have_last_omega_base_) {
+              const Eigen::Vector3d omega_base(last_omega_base_.x,
+                last_omega_base_.y,
+                last_omega_base_.z);
               const auto & t =
-                m_tf_cache.extrinsics().base_to_gnss.transform.translation;
+                tf_cache_.extrinsics().base_to_gnss.transform.translation;
               const Eigen::Vector3d r_base(t.x, t.y, t.z);
               const Eigen::Matrix3d R =
-                m_eskf.q_map_from_base().toRotationMatrix();
+                eskf_.q_map_from_base().toRotationMatrix();
               z_v_map -= R * (omega_base.cross(r_base));
             }
 
             GnssVelUpdateConfig config;
             config.covariance_scale =
-              m_node_params.gnss.vel_cov_scale * effective_inflate;
-            config.vel_var_fallback = m_node_params.gnss.vel_var_fallback;
-            config.vel_var_min = m_node_params.gnss.vel_var_min;
-            config.vel_var_max = m_node_params.gnss.vel_var_max;
+              node_params_.gnss.vel_cov_scale * effective_inflate;
+            config.vel_var_fallback = node_params_.gnss.vel_var_fallback;
+            config.vel_var_min = node_params_.gnss.vel_var_min;
+            config.vel_var_max = node_params_.gnss.vel_var_max;
 
-            m_last_gnss_vel_update_dbg =
-              m_gnss_update_handler.apply_velocity_update(
-              m_eskf, z_v_map,
+            last_gnss_vel_update_dbg_ =
+              gnss_update_handler_.apply_velocity_update(
+              eskf_, z_v_map,
               config);
 
-            if (current_stamp > m_state_stamp) {
-              m_state_stamp = current_stamp;
+            if (current_stamp > state_stamp_) {
+              state_stamp_ = current_stamp;
             }
 
             // FGO Stage 3: 속도 측정값을 캐시된 GNSS 측정값에 추가
-            if (m_latest_fgo_gnss_.has_value()) {
+            if (latest_fgo_gnss_.has_value()) {
               const double vel_var =
-                m_node_params.gnss.vel_var_fallback * effective_inflate;
-              m_latest_fgo_gnss_->has_velocity = true;
-              m_latest_fgo_gnss_->vel_map = z_v_map;
-              m_latest_fgo_gnss_->vel_cov =
+                node_params_.gnss.vel_var_fallback * effective_inflate;
+              latest_fgo_gnss_->has_velocity = true;
+              latest_fgo_gnss_->vel_map = z_v_map;
+              latest_fgo_gnss_->vel_cov =
                 Eigen::Matrix3d::Identity() * vel_var;
             }
           }
@@ -879,36 +879,36 @@ void HybridLocalizationNode::gnss_vel_callback(
     }
   }
 
-  m_latest_gnss_vel = t_msg;
-  m_last_gnss_vel_stamp = current_stamp;
-  m_gnss_vel_count++;
+  latest_gnss_vel_ = t_msg;
+  last_gnss_vel_stamp_ = current_stamp;
+  gnss_vel_count_++;
 }
 
 void HybridLocalizationNode::map_projector_info_callback(
   const tier4_map_msgs::msg::MapProjectorInfo::SharedPtr t_msg)
 {
   // map projector 초기화 (GNSS 투영에 필수)
-  m_map_projector.set_info(*t_msg);
+  map_projector_.set_info(*t_msg);
 
-  if (!m_map_projector_received) {
-    const auto & origin = m_map_projector.origin();
+  if (!map_projector_received_) {
+    const auto & origin = map_projector_.origin();
     RCLCPP_INFO(
       this->get_logger(), "Map projector info received: type=%s, lat0=%.8f deg (%.8f " "rad), lon0=%.8f deg (%.8f rad), alt0=%.3f m",
       t_msg->projector_type.c_str(), t_msg->map_origin.latitude, origin.lat0_rad, t_msg->map_origin.longitude, origin.lon0_rad,
       origin.alt0_m);
-    m_map_projector_received = true;
+    map_projector_received_ = true;
   }
 }
 
 void HybridLocalizationNode::heading_callback(
   const skyautonet_msgs::msg::Gphdt::SharedPtr t_msg)
 {
-  const bool activated = (!m_node_params.init.require_trigger) || m_is_activated_;
+  const bool activated = (!node_params_.init.require_trigger) || is_activated_;
 
   const rclcpp::Time current_stamp(t_msg->header.stamp);
   const rclcpp::Time now = this->now();
   if (!validate_stamp_and_order(
-      current_stamp, now, m_last_heading_stamp,
+      current_stamp, now, last_heading_stamp_,
       "Heading"))
   {
     return;
@@ -917,7 +917,7 @@ void HybridLocalizationNode::heading_callback(
   // heading(비표준) → ENU yaw 변환
   const double yaw_meas = heading_deg_to_enu_yaw_rad(t_msg->heading);
 
-  const auto & heading_params = m_node_params.heading;
+  const auto & heading_params = node_params_.heading;
   auto source_from_inflate =
     [](const double status_inflate, const double recover_inflate) -> std::string {
       if (recover_inflate > 1.0 + 1e-9) {
@@ -942,11 +942,11 @@ void HybridLocalizationNode::heading_callback(
         yaw_var = 0.01;
       }
 
-      m_last_yaw_meas_var_rad2 = yaw_var;
-      m_last_heading_status_inflate_dbg = status_inflate;
-      m_last_heading_recover_inflate_dbg = recover_inflate;
-      m_last_heading_yaw_var_pre_nis_dbg = yaw_var;
-      m_last_heading_yaw_var_source_dbg = source;
+      last_yaw_meas_var_rad2_ = yaw_var;
+      last_heading_status_inflate_dbg_ = status_inflate;
+      last_heading_recover_inflate_dbg_ = recover_inflate;
+      last_heading_yaw_var_pre_nis_dbg_ = yaw_var;
+      last_heading_yaw_var_source_dbg_ = source;
       return yaw_var;
     };
 
@@ -963,28 +963,28 @@ void HybridLocalizationNode::heading_callback(
   if (!std::isfinite(yaw_var_for_update) || !(yaw_var_for_update > 0.0)) {
     yaw_var_for_update = 0.01;
   }
-  m_last_yaw_meas_var_rad2 = yaw_var_for_update;
-  m_last_heading_status_inflate_dbg = status_inflate;
-  m_last_heading_recover_inflate_dbg = recover_inflate;
-  m_last_heading_yaw_var_pre_nis_dbg = yaw_var_for_update;
-  m_last_heading_yaw_var_source_dbg =
+  last_yaw_meas_var_rad2_ = yaw_var_for_update;
+  last_heading_status_inflate_dbg_ = status_inflate;
+  last_heading_recover_inflate_dbg_ = recover_inflate;
+  last_heading_yaw_var_pre_nis_dbg_ = yaw_var_for_update;
+  last_heading_yaw_var_source_dbg_ =
     source_from_inflate(status_inflate, recover_inflate);
-  m_last_heading_yaw_var_applied_dbg = std::numeric_limits<double>::quiet_NaN();
+  last_heading_yaw_var_applied_dbg_ = std::numeric_limits<double>::quiet_NaN();
 
   bool apply_rate_gate = false;
   {
-    std::scoped_lock<std::mutex> lock(m_state_mutex);
-    if (m_eskf.initialized()) {
-      const double since_init_sec = (current_stamp - m_eskf_init_stamp_).seconds();
+    std::scoped_lock<std::mutex> lock(state_mutex_);
+    if (eskf_.initialized()) {
+      const double since_init_sec = (current_stamp - eskf_init_stamp_).seconds();
       apply_rate_gate =
         std::isfinite(since_init_sec) &&
         (since_init_sec >= k_heading_rate_gate_init_grace_sec_);
     }
   }
 
-  if (apply_rate_gate && m_heading_received && (m_last_heading_stamp.seconds() > 0.0))
+  if (apply_rate_gate && heading_received_ && (last_heading_stamp_.seconds() > 0.0))
   {
-    const double dt = (current_stamp - m_last_heading_stamp).seconds();
+    const double dt = (current_stamp - last_heading_stamp_).seconds();
     if (dt > 1e-6 && std::isfinite(dt) &&
       std::isfinite(heading_params.max_rate_radps) &&
       (heading_params.max_rate_radps > 0.0))
@@ -994,14 +994,14 @@ void HybridLocalizationNode::heading_callback(
       // - Fallback to last-good measurement if ESKF isn't initialized yet.
       double yaw_ref = std::numeric_limits<double>::quiet_NaN();
       {
-        std::scoped_lock<std::mutex> lock(m_state_mutex);
-        if (m_eskf.initialized()) {
-          const Eigen::Matrix3d R = m_eskf.q_map_from_base().toRotationMatrix();
+        std::scoped_lock<std::mutex> lock(state_mutex_);
+        if (eskf_.initialized()) {
+          const Eigen::Matrix3d R = eskf_.q_map_from_base().toRotationMatrix();
           yaw_ref = std::atan2(R(1, 0), R(0, 0));
         }
       }
-      if (!std::isfinite(yaw_ref) && std::isfinite(m_latest_heading_yaw_rad)) {
-        yaw_ref = m_latest_heading_yaw_rad;
+      if (!std::isfinite(yaw_ref) && std::isfinite(latest_heading_yaw_rad_)) {
+        yaw_ref = latest_heading_yaw_rad_;
       }
 
       if (std::isfinite(yaw_ref)) {
@@ -1014,18 +1014,18 @@ void HybridLocalizationNode::heading_callback(
         // Track consecutive skips and allow a guarded recovery bypass to avoid
         // getting stuck when the "reference" was previously contaminated.
         const bool have_window_start =
-          (m_heading_rate_gate_skip_window_start_.seconds() > 0.0);
-        if (m_heading_rate_gate_skip_count_ <= 0 || !have_window_start) {
-          m_heading_rate_gate_skip_count_ = 0;
-          m_heading_rate_gate_skip_window_start_ = current_stamp;
+          (heading_rate_gate_skip_window_start_.seconds() > 0.0);
+        if (heading_rate_gate_skip_count_ <= 0 || !have_window_start) {
+          heading_rate_gate_skip_count_ = 0;
+          heading_rate_gate_skip_window_start_ = current_stamp;
         }
-        m_heading_rate_gate_skip_count_++;
+        heading_rate_gate_skip_count_++;
 
         const double skip_elapsed_sec =
-          (current_stamp - m_heading_rate_gate_skip_window_start_).seconds();
+          (current_stamp - heading_rate_gate_skip_window_start_).seconds();
         const bool hit_count =
           (heading_params.rate_gate_skip_max_count > 0) &&
-          (m_heading_rate_gate_skip_count_ >= heading_params.rate_gate_skip_max_count);
+          (heading_rate_gate_skip_count_ >= heading_params.rate_gate_skip_max_count);
         const bool hit_time =
           (std::isfinite(heading_params.rate_gate_skip_max_sec)) &&
           (heading_params.rate_gate_skip_max_sec > 0.0) &&
@@ -1041,30 +1041,30 @@ void HybridLocalizationNode::heading_callback(
           const double stamp_sec = current_stamp.seconds();
           bool sample_usable = false;
           {
-            std::scoped_lock<std::mutex> lock(m_heading_arbitrator_mutex);
+            std::scoped_lock<std::mutex> lock(heading_arbitrator_mutex_);
             const char * reason = nullptr;
             sample_usable =
-              m_heading_arbitrator.gphdt_sample_usable(
+              heading_arbitrator_.gphdt_sample_usable(
               yaw_meas, yaw_var_scaled, stamp_sec, stamp_sec, &reason);
           }
 
           if (sample_usable) {
             bypassed_rate_gate = true;
             yaw_var_for_update = yaw_var_scaled;
-            m_last_yaw_meas_var_rad2 = yaw_var_for_update;
-            m_last_heading_yaw_var_pre_nis_dbg = yaw_var_for_update;
-            m_last_heading_yaw_var_source_dbg = "rate_bypass";
-            m_heading_rate_gate_skip_count_ = 0;
-            m_heading_rate_gate_skip_window_start_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+            last_yaw_meas_var_rad2_ = yaw_var_for_update;
+            last_heading_yaw_var_pre_nis_dbg_ = yaw_var_for_update;
+            last_heading_yaw_var_source_dbg_ = "rate_bypass";
+            heading_rate_gate_skip_count_ = 0;
+            heading_rate_gate_skip_window_start_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
           }
         }
 
         if (!bypassed_rate_gate) {
-          m_last_heading_yaw_update_dbg = EskfYawUpdateDebug{};
-          m_last_heading_yaw_update_dbg.reason = "rate_gate_skip";
+          last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
+          last_heading_yaw_update_dbg_.reason = "rate_gate_skip";
           raise_heading_recover_inflate("rate_gate_skip", current_stamp);
           (void)refresh_heading_var_snapshot("inflated_event");
-          m_last_heading_stamp = current_stamp;
+          last_heading_stamp_ = current_stamp;
           return;
         }
       }
@@ -1074,112 +1074,112 @@ void HybridLocalizationNode::heading_callback(
 
   // Passed the rate gate -> clear skip state.
   if (!bypassed_rate_gate) {
-    m_heading_rate_gate_skip_count_ = 0;
-    m_heading_rate_gate_skip_window_start_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+    heading_rate_gate_skip_count_ = 0;
+    heading_rate_gate_skip_window_start_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
   }
 
   const double stamp_sec = current_stamp.seconds();
   if (bypassed_rate_gate) {
-    m_last_heading_yaw_var_source_dbg = "rate_bypass";
+    last_heading_yaw_var_source_dbg_ = "rate_bypass";
   }
   {
-    std::scoped_lock<std::mutex> lock(m_heading_arbitrator_mutex);
-    m_heading_arbitrator.update_gphdt(yaw_meas, yaw_var_for_update, stamp_sec);
-    const auto yaw_sel = m_heading_arbitrator.select(stamp_sec);
+    std::scoped_lock<std::mutex> lock(heading_arbitrator_mutex_);
+    heading_arbitrator_.update_gphdt(yaw_meas, yaw_var_for_update, stamp_sec);
+    const auto yaw_sel = heading_arbitrator_.select(stamp_sec);
     if (yaw_sel.source != GnssHeadingSource::kGphdt) {
       const char * reason = nullptr;
-      m_heading_arbitrator.gphdt_usable(stamp_sec, &reason);
-      m_last_heading_yaw_update_dbg = EskfYawUpdateDebug{};
-      m_last_heading_yaw_update_dbg.reason =
+      heading_arbitrator_.gphdt_usable(stamp_sec, &reason);
+      last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
+      last_heading_yaw_update_dbg_.reason =
         (reason != nullptr) ? reason : "heading_skip";
       raise_heading_recover_inflate(
-        m_last_heading_yaw_update_dbg.reason, current_stamp);
+        last_heading_yaw_update_dbg_.reason, current_stamp);
       (void)refresh_heading_var_snapshot("inflated_event");
-      m_last_heading_stamp = current_stamp;
+      last_heading_stamp_ = current_stamp;
       return;
     }
   }
 
-  m_latest_heading = t_msg;
-  m_latest_heading_yaw_rad = yaw_meas;
+  latest_heading_ = t_msg;
+  latest_heading_yaw_rad_ = yaw_meas;
 
-  if (!m_heading_received) {
+  if (!heading_received_) {
     RCLCPP_INFO(
-      this->get_logger(), "First heading received: %.2f deg -> ENU yaw %.4f rad (%.2f deg)", t_msg->heading, m_latest_heading_yaw_rad,
-      m_latest_heading_yaw_rad * 180.0 / M_PI);
-    m_heading_received = true;
+      this->get_logger(), "First heading received: %.2f deg -> ENU yaw %.4f rad (%.2f deg)", t_msg->heading, latest_heading_yaw_rad_,
+      latest_heading_yaw_rad_ * 180.0 / M_PI);
+    heading_received_ = true;
   }
 
   if (!activated) {
-    m_last_heading_stamp = current_stamp;
+    last_heading_stamp_ = current_stamp;
     return;
   }
 
   // heading 기반 yaw 업데이트
-  std::scoped_lock<std::mutex> lock(m_state_mutex);
-  if (!m_eskf.initialized()) {
-    m_last_heading_yaw_update_dbg = EskfYawUpdateDebug{};
-    m_last_heading_yaw_update_dbg.reason =
-      m_use_external_initialpose_ ? "external_initialpose_mode" : "not_initialized";
+  std::scoped_lock<std::mutex> lock(state_mutex_);
+  if (!eskf_.initialized()) {
+    last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
+    last_heading_yaw_update_dbg_.reason =
+      use_external_initialpose_ ? "external_initialpose_mode" : "not_initialized";
 
-    if (!m_use_external_initialpose_ && m_pending_init_position &&
+    if (!use_external_initialpose_ && pending_init_position_ &&
       std::isfinite(yaw_meas))
     {
       const Eigen::AngleAxisd yaw_aa(yaw_meas, Eigen::Vector3d::UnitZ());
       const Eigen::Quaterniond q_init(yaw_aa);
-      m_eskf.initialize(m_pending_init_p_map, q_init);
-      m_eskf_init_stamp_ = current_stamp;
-      m_state_stamp = std::max(m_pending_init_stamp, current_stamp);
-      m_pending_init_position = false;
+      eskf_.initialize(pending_init_p_map_, q_init);
+      eskf_init_stamp_ = current_stamp;
+      state_stamp_ = std::max(pending_init_stamp_, current_stamp);
+      pending_init_position_ = false;
       RCLCPP_INFO(
         this->get_logger(), "ESKF initialized from cached GNSS+Heading (p=[%.3f, " "%.3f, %.3f], yaw=%.3f rad)",
-        m_pending_init_p_map.x(), m_pending_init_p_map.y(), m_pending_init_p_map.z(), yaw_meas);
+        pending_init_p_map_.x(), pending_init_p_map_.y(), pending_init_p_map_.z(), yaw_meas);
     }
-  } else if (m_state_stamp.seconds() > 0.0 &&
+  } else if (state_stamp_.seconds() > 0.0 &&
     (current_stamp +
     rclcpp::Duration::from_seconds(
-      std::max(0.0, m_node_params.time_alignment_tolerance_sec))) <
-    m_state_stamp)
+      std::max(0.0, node_params_.time_alignment_tolerance_sec))) <
+    state_stamp_)
   {
-    m_last_heading_yaw_update_dbg = EskfYawUpdateDebug{};
-    m_last_heading_yaw_update_dbg.reason = "time_alignment";
+    last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
+    last_heading_yaw_update_dbg_.reason = "time_alignment";
   } else if (!heading_params.enable_yaw_update) {
-    m_last_heading_yaw_update_dbg = EskfYawUpdateDebug{};
-    m_last_heading_yaw_update_dbg.reason = "disabled";
+    last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
+    last_heading_yaw_update_dbg_.reason = "disabled";
   } else {
-    m_last_heading_yaw_update_dbg =
-      m_eskf.update_heading_yaw(yaw_meas, yaw_var_for_update);
-    if (m_last_heading_yaw_update_dbg.reason.empty()) {
-      m_last_heading_yaw_update_dbg.reason =
+    last_heading_yaw_update_dbg_ =
+      eskf_.update_heading_yaw(yaw_meas, yaw_var_for_update);
+    if (last_heading_yaw_update_dbg_.reason.empty()) {
+      last_heading_yaw_update_dbg_.reason =
         bypassed_rate_gate ? "rate_gate_bypass_heading" : "heading";
-    } else if (m_last_heading_yaw_update_dbg.reason == "nis_inflated") {
+    } else if (last_heading_yaw_update_dbg_.reason == "nis_inflated") {
       if (bypassed_rate_gate) {
-        m_last_heading_yaw_update_dbg.reason = "rate_gate_bypass_nis_inflated";
+        last_heading_yaw_update_dbg_.reason = "rate_gate_bypass_nis_inflated";
       }
     } else {
-      m_last_heading_yaw_update_dbg.reason =
+      last_heading_yaw_update_dbg_.reason =
         (bypassed_rate_gate ? "rate_gate_bypass_heading_" : "heading_") +
-        m_last_heading_yaw_update_dbg.reason;
+        last_heading_yaw_update_dbg_.reason;
     }
-    if (m_last_heading_yaw_update_dbg.applied) {
-      if (std::isfinite(m_last_heading_yaw_update_dbg.R) &&
-        (m_last_heading_yaw_update_dbg.R > 0.0))
+    if (last_heading_yaw_update_dbg_.applied) {
+      if (std::isfinite(last_heading_yaw_update_dbg_.R) &&
+        (last_heading_yaw_update_dbg_.R > 0.0))
       {
-        m_last_heading_yaw_var_applied_dbg = m_last_heading_yaw_update_dbg.R;
+        last_heading_yaw_var_applied_dbg_ = last_heading_yaw_update_dbg_.R;
       }
-      m_last_heading_yaw_var_source_dbg =
+      last_heading_yaw_var_source_dbg_ =
         bypassed_rate_gate ? "applied_rate_bypass" : "applied";
-      if (current_stamp > m_state_stamp) {
-        m_state_stamp = current_stamp;
+      if (current_stamp > state_stamp_) {
+        state_stamp_ = current_stamp;
       }
-    } else if (!m_last_heading_yaw_update_dbg.reason.empty()) {
-      raise_heading_recover_inflate(m_last_heading_yaw_update_dbg.reason, current_stamp);
+    } else if (!last_heading_yaw_update_dbg_.reason.empty()) {
+      raise_heading_recover_inflate(last_heading_yaw_update_dbg_.reason, current_stamp);
       yaw_var_for_update = refresh_heading_var_snapshot("inflated_event");
       (void)yaw_var_for_update;
     }
   }
 
-  m_last_heading_stamp = current_stamp;
+  last_heading_stamp_ = current_stamp;
 }
 
 } // namespace hybrid_localization

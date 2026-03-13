@@ -15,86 +15,86 @@ namespace hybrid_localization
 // 시스템 전체 배선 구조를 빠르게 파악할 수 있도록 구성한다.
 
 HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_options)
-: Node("hybrid_localization", t_options), m_imu_count(0), m_gnss_count(0),
-  m_gnss_vel_count(0), m_velocity_count(0), m_steering_count(0),
-  m_map_projector_received(false), m_last_imu_stamp(0, 0, RCL_ROS_TIME),
-  m_last_gnss_stamp(0, 0, RCL_ROS_TIME),
-  m_last_gnss_vel_stamp(0, 0, RCL_ROS_TIME),
-  m_last_velocity_stamp(0, 0, RCL_ROS_TIME),
-  m_last_steering_stamp(0, 0, RCL_ROS_TIME),
-  m_last_heading_stamp(0, 0, RCL_ROS_TIME)
+: Node("hybrid_localization", t_options), imu_count_(0), gnss_count_(0),
+  gnss_vel_count_(0), velocity_count_(0), steering_count_(0),
+  map_projector_received_(false), last_imu_stamp_(0, 0, RCL_ROS_TIME),
+  last_gnss_stamp_(0, 0, RCL_ROS_TIME),
+  last_gnss_vel_stamp_(0, 0, RCL_ROS_TIME),
+  last_velocity_stamp_(0, 0, RCL_ROS_TIME),
+  last_steering_stamp_(0, 0, RCL_ROS_TIME),
+  last_heading_stamp_(0, 0, RCL_ROS_TIME)
 {
   RCLCPP_INFO(this->get_logger(), "Initializing Hybrid Localization Node");
 
   // CallbackGroup 생성 — 각 주파수 도메인을 독립 스레드에서 실행
-  m_imu_cb_group_ = this->create_callback_group(
+  imu_cb_group_ = this->create_callback_group(
     rclcpp::CallbackGroupType::MutuallyExclusive);
-  m_sensor_cb_group_ = this->create_callback_group(
+  sensor_cb_group_ = this->create_callback_group(
     rclcpp::CallbackGroupType::MutuallyExclusive);
-  m_timer_cb_group_ = this->create_callback_group(
+  timer_cb_group_ = this->create_callback_group(
     rclcpp::CallbackGroupType::MutuallyExclusive);
 
   load_parameters(); // 파라미터 로딩은 별도 로더에서 일괄 처리
 
   // FGO Stage 2: ImuPreintegration 파라미터 적용 및 초기화
-  m_imu_preint = ImuPreintegration(m_node_params.imu_preint);
-  m_keyframe_buffer.set_max_size(
-    static_cast<size_t>(m_node_params.fgo_backend.window_size));
+  imu_preint_ = ImuPreintegration(node_params_.imu_preint);
+  keyframe_buffer_.set_max_size(
+    static_cast<size_t>(node_params_.fgo_backend.window_size));
 
   // FGO Stage 3: ISAM2 백엔드 + GTSAM IMU 사전적분 초기화
-  m_fgo_backend.initialize(m_node_params.fgo_backend, m_node_params.imu_preint);
-  m_gtsam_preint_ =
+  fgo_backend_.initialize(node_params_.fgo_backend, node_params_.imu_preint);
+  gtsam_preint_ =
     boost::make_shared<gtsam::PreintegratedCombinedMeasurements>(
-    m_fgo_backend.gtsam_preint_params(),
+    fgo_backend_.gtsam_preint_params(),
     gtsam::imuBias::ConstantBias{});
 
   // FGO Stage 4+5: EskfCorrector 파라미터 적용
-  m_eskf_corrector_.set_params(m_node_params.fgo_corrector);
+  eskf_corrector_.set_params(node_params_.fgo_corrector);
 
-  const auto & io = m_node_params.io;
+  const auto & io = node_params_.io;
   OdomBuilderConfig odom_config;
   odom_config.map_frame = io.map_frame;
   odom_config.base_frame = io.base_frame;
-  odom_config.gyro_noise_std = m_node_params.eskf.gyro_noise_std;
-  m_odom_builder.set_config(odom_config);
+  odom_config.gyro_noise_std = node_params_.eskf.gyro_noise_std;
+  odom_builder_.set_config(odom_config);
 
   // TF 버퍼/리스너는 초기화 초기에 생성해 다른 모듈에서 사용 가능하도록 한다.
-  m_tf_buffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  m_tf_listener = std::make_shared<tf2_ros::TransformListener>(*m_tf_buffer);
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-  m_odom_pub = this->create_publisher<nav_msgs::msg::Odometry>(
+  odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
     io.output_odom_topic, 10);
-  m_pose_pub = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+  pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
     "/localization/pose_twist_fusion_filter/pose", 10);
-  m_gnss_odom_pub = this->create_publisher<nav_msgs::msg::Odometry>(
+  gnss_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
     "/localization/kinematic_state_gnss", 10);
-  if (m_node_params.gnss.publish_pose_with_covariance) {
-    m_gnss_pose_cov_pub =
+  if (node_params_.gnss.publish_pose_with_covariance) {
+    gnss_pose_cov_pub_ =
       this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
-      m_node_params.gnss.pose_with_covariance_topic, 10);
+      node_params_.gnss.pose_with_covariance_topic, 10);
   }
-  m_diag_pub = this->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+  diag_pub_ = this->create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
     "/diagnostics", 10);
-  m_preprocessed_imu_pub = this->create_publisher<sensor_msgs::msg::Imu>(
+  preprocessed_imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>(
     "/sensing/imu/imu_data", 10);
-  m_gnss_velocity_pub = this->create_publisher<autoware_vehicle_msgs::msg::VelocityReport>(
+  gnss_velocity_pub_ = this->create_publisher<autoware_vehicle_msgs::msg::VelocityReport>(
     "/sensing/gnss/velocity_status", 10);
-  m_keyframe_path_pub = this->create_publisher<nav_msgs::msg::Path>(
+  keyframe_path_pub_ = this->create_publisher<nav_msgs::msg::Path>(
     "/localization/fgo/keyframe_path", 10);
-  m_keyframe_path_.header.frame_id = io.map_frame;
+  keyframe_path_.header.frame_id = io.map_frame;
 
-  m_tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
-  m_tf_cache.set_tf_buffer(m_tf_buffer);
-  m_tf_cache.set_base_frame(io.base_frame);
-  m_tf_cache.cache_common_extrinsics(this->get_logger());
+  tf_cache_.set_tf_buffer(tf_buffer_);
+  tf_cache_.set_base_frame(io.base_frame);
+  tf_cache_.cache_common_extrinsics(this->get_logger());
 
   // 센서 구독/퍼블리셔 설정은 노드 배선의 핵심
   // IMU: 전용 고주파 그룹 (200Hz)
   {
     rclcpp::SubscriptionOptions imu_opts;
-    imu_opts.callback_group = m_imu_cb_group_;
-    m_imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
+    imu_opts.callback_group = imu_cb_group_;
+    imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
       io.imu_topic, 1,
       std::bind(&HybridLocalizationNode::imu_callback, this, std::placeholders::_1),
       imu_opts);
@@ -103,19 +103,19 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
   // 저주파 센서 구독: GNSS / Vehicle / Heading — 공유 센서 그룹
   {
     rclcpp::SubscriptionOptions sensor_opts;
-    sensor_opts.callback_group = m_sensor_cb_group_;
+    sensor_opts.callback_group = sensor_cb_group_;
 
-    m_gnss_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>(
+    gnss_sub_ = this->create_subscription<sensor_msgs::msg::NavSatFix>(
       io.gnss_topic, 1,
       std::bind(&HybridLocalizationNode::gnss_callback, this, std::placeholders::_1),
       sensor_opts);
 
-    m_gnss_vel_sub = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+    gnss_vel_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
       io.gnss_vel_topic, 1,
       std::bind(&HybridLocalizationNode::gnss_vel_callback, this, std::placeholders::_1),
       sensor_opts);
 
-    m_map_projector_sub =
+    map_projector_sub_ =
       this->create_subscription<tier4_map_msgs::msg::MapProjectorInfo>(
       io.map_projector_info_topic, rclcpp::QoS(1).transient_local(),
       std::bind(
@@ -123,27 +123,27 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
         std::placeholders::_1),
       sensor_opts);
 
-    m_velocity_sub =
+    velocity_sub_ =
       this->create_subscription<autoware_vehicle_msgs::msg::VelocityReport>(
       io.velocity_topic, 1,
       std::bind(&HybridLocalizationNode::velocity_callback, this, std::placeholders::_1),
       sensor_opts);
 
-    m_steering_sub =
+    steering_sub_ =
       this->create_subscription<autoware_vehicle_msgs::msg::SteeringReport>(
       io.steering_topic, 1,
       std::bind(&HybridLocalizationNode::steering_callback, this, std::placeholders::_1),
       sensor_opts);
 
-    m_heading_sub = this->create_subscription<skyautonet_msgs::msg::Gphdt>(
+    heading_sub_ = this->create_subscription<skyautonet_msgs::msg::Gphdt>(
       io.heading_topic, 1,
       std::bind(&HybridLocalizationNode::heading_callback, this, std::placeholders::_1),
       sensor_opts);
 
     // 외부 초기자세 입력 (/initialpose3d)
-    m_initialpose_sub =
+    initialpose_sub_ =
       this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
-      m_node_params.init.external_initialpose_topic, 1,
+      node_params_.init.external_initialpose_topic, 1,
       std::bind(
         &HybridLocalizationNode::initialpose_callback, this,
         std::placeholders::_1),
@@ -157,42 +157,42 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
       &HybridLocalizationNode::service_trigger_node, this,
       std::placeholders::_1, std::placeholders::_2),
     rclcpp::ServicesQoS().get_rmw_qos_profile(),
-    m_sensor_cb_group_);
+    sensor_cb_group_);
 
 
   // IMU 캘리브레이션 경로/시작 여부는 파라미터에 의해 결정
-  if (m_node_params.init_imu_calibration) {
+  if (node_params_.init_imu_calibration) {
     RCLCPP_INFO(
       this->get_logger(), "Starting IMU calibration (duration: %.1f seconds)",
       IMU_CALIBRATION_DURATION_SEC);
     RCLCPP_WARN(this->get_logger(), "Please ensure the vehicle is stationary during calibration!");
-    m_imu_calibration_manager.start(this->now(), IMU_CALIBRATION_DURATION_SEC);
+    imu_calibration_manager_.start(this->now(), IMU_CALIBRATION_DURATION_SEC);
   } else {
-    if (m_imu_preprocessor.load_calibration(
-        m_node_params.calibration_file_path))
+    if (imu_preprocessor_.load_calibration(
+        node_params_.calibration_file_path))
     {
       RCLCPP_INFO(
         this->get_logger(), "Loaded IMU calibration from file: %s",
-        m_node_params.calibration_file_path.c_str());
+        node_params_.calibration_file_path.c_str());
       RCLCPP_INFO(
         this->get_logger(), " Gyro bias: [%.6f, %.6f, %.6f] rad/s",
-        m_imu_preprocessor.calibration().gyro_bias.x,
-        m_imu_preprocessor.calibration().gyro_bias.y,
-        m_imu_preprocessor.calibration().gyro_bias.z);
+        imu_preprocessor_.calibration().gyro_bias.x,
+        imu_preprocessor_.calibration().gyro_bias.y,
+        imu_preprocessor_.calibration().gyro_bias.z);
     } else {
       RCLCPP_ERROR(
         this->get_logger(), "Failed to load IMU calibration from file: %s. Please run with " "init_imu_calibration:=true to calibrate.",
-        m_node_params.calibration_file_path.c_str());
+        node_params_.calibration_file_path.c_str());
     }
   }
 
   // 발행 타이머 생성 — 타이머 전용 그룹에 할당
-  const double rate_hz = m_node_params.io.publish_rate;
+  const double rate_hz = node_params_.io.publish_rate;
   const auto period = std::chrono::duration<double>(1.0 / rate_hz);
-  m_publish_timer = this->create_wall_timer(
+  publish_timer_ = this->create_wall_timer(
     std::chrono::duration_cast<std::chrono::nanoseconds>(period),
     std::bind(&HybridLocalizationNode::publish_timer_callback, this),
-    m_timer_cb_group_);
+    timer_cb_group_);
 
   RCLCPP_INFO(
     this->get_logger(), "Hybrid Localization Node ready (publish_rate=%.0f Hz, threads=3)",
@@ -204,9 +204,9 @@ void HybridLocalizationNode::maybe_push_keyframe(
   const NominalState & state,
   const EskfCore::P15 & P)
 {
-  // m_state_mutex 가 이미 잠긴 상태에서 호출된다.
-  if (!m_keyframe_buffer.should_create_keyframe(
-      stamp, state, m_node_params.keyframe))
+  // state_mutex_ 가 이미 잠긴 상태에서 호출된다.
+  if (!keyframe_buffer_.should_create_keyframe(
+      stamp, state, node_params_.keyframe))
   {
     return;
   }
@@ -215,22 +215,22 @@ void HybridLocalizationNode::maybe_push_keyframe(
   kf.stamp = stamp;
   kf.state = state;
   kf.P = P;
-  kf.preint = m_imu_preint;  // ESKF 재선형화용 사전적분
+  kf.preint = imu_preint_;  // ESKF 재선형화용 사전적분
 
   // FGO Stage 3: GTSAM 사전적분 스냅샷 저장 (null = 첫 키프레임)
-  if (m_gtsam_preint_ && m_gtsam_preint_->deltaTij() > 0.0) {
+  if (gtsam_preint_ && gtsam_preint_->deltaTij() > 0.0) {
     kf.gtsam_preint = boost::make_shared<gtsam::PreintegratedCombinedMeasurements>(
-      *m_gtsam_preint_);
+      *gtsam_preint_);
   }
 
-  m_keyframe_buffer.push(kf);
-  ++m_fgo_keyframe_count_;
+  keyframe_buffer_.push(kf);
+  ++fgo_keyframe_count_;
 
   // FGO Stage 5: 키프레임 경로에 새 포즈 추가
   {
     geometry_msgs::msg::PoseStamped kf_pose;
     kf_pose.header.stamp = stamp;
-    kf_pose.header.frame_id = m_node_params.io.map_frame;
+    kf_pose.header.frame_id = node_params_.io.map_frame;
     kf_pose.pose.position.x = state.p_map.x();
     kf_pose.pose.position.y = state.p_map.y();
     kf_pose.pose.position.z = state.p_map.z();
@@ -238,32 +238,32 @@ void HybridLocalizationNode::maybe_push_keyframe(
     kf_pose.pose.orientation.x = state.q_map_from_base.x();
     kf_pose.pose.orientation.y = state.q_map_from_base.y();
     kf_pose.pose.orientation.z = state.q_map_from_base.z();
-    m_keyframe_path_.header.stamp = stamp;
-    m_keyframe_path_.poses.push_back(kf_pose);
+    keyframe_path_.header.stamp = stamp;
+    keyframe_path_.poses.push_back(kf_pose);
     // 슬라이딩 윈도우 크기에 맞게 경로도 트리밍
-    const size_t max_path = static_cast<size_t>(m_node_params.fgo_backend.window_size) * 2;
-    while (m_keyframe_path_.poses.size() > max_path) {
-      m_keyframe_path_.poses.erase(m_keyframe_path_.poses.begin());
+    const size_t max_path = static_cast<size_t>(node_params_.fgo_backend.window_size) * 2;
+    while (keyframe_path_.poses.size() > max_path) {
+      keyframe_path_.poses.erase(keyframe_path_.poses.begin());
     }
-    m_keyframe_path_pub->publish(m_keyframe_path_);
+    keyframe_path_pub_->publish(keyframe_path_);
   }
 
   // FGO Stage 3+4+5: 그래프 업데이트 + ESKF 앵커 보정 + 진단 카운터
-  if (m_fgo_backend.is_initialized()) {
-    const auto result = m_fgo_backend.update(kf, m_latest_fgo_gnss_);
-    m_latest_fgo_gnss_.reset();  // 사용 후 소비
+  if (fgo_backend_.is_initialized()) {
+    const auto result = fgo_backend_.update(kf, latest_fgo_gnss_);
+    latest_fgo_gnss_.reset();  // 사용 후 소비
 
     if (result.valid) {
       // Stage 4+5: FGO 결과를 ESKF 명목 상태+공분산에 반영 + keyframe 이후 IMU 재적분
-      const int n_reint = m_eskf_corrector_.apply(
-        m_eskf, result, kf.stamp.seconds(), m_imu_buffer_);
-      ++m_fgo_correction_count_;
+      const int n_reint = eskf_corrector_.apply(
+        eskf_, result, kf.stamp.seconds(), imu_buffer_);
+      ++fgo_correction_count_;
 
       RCLCPP_DEBUG(
         this->get_logger(),
         "FGO correction #%zu: kf=%lu  p_fgo=(%.2f, %.2f, %.2f)  reint=%d  "
         "P_pos_max=%.4f",
-        m_fgo_correction_count_,
+        fgo_correction_count_,
         result.keyframe_index,
         result.state.p_map.x(),
         result.state.p_map.y(),
@@ -274,15 +274,15 @@ void HybridLocalizationNode::maybe_push_keyframe(
   }
 
   // GTSAM 사전적분 리셋 (새 바이어스 추정값 기준)
-  if (m_gtsam_preint_) {
-    m_gtsam_preint_->resetIntegrationAndSetBias(
+  if (gtsam_preint_) {
+    gtsam_preint_->resetIntegrationAndSetBias(
       gtsam::imuBias::ConstantBias(
         gtsam::Vector3(state.b_a.x(), state.b_a.y(), state.b_a.z()),
         gtsam::Vector3(state.b_g.x(), state.b_g.y(), state.b_g.z())));
   }
 
   // ESKF 사전적분 리셋
-  m_imu_preint.reset(state.b_g, state.b_a);
+  imu_preint_.reset(state.b_g, state.b_a);
 }
 
 bool HybridLocalizationNode::validate_stamp_and_order(
@@ -290,7 +290,7 @@ bool HybridLocalizationNode::validate_stamp_and_order(
   const rclcpp::Time & last_stamp, const char * label)
 {
   auto clock = this->get_clock();
-  const auto stamp_result = m_time_processor.validate_stamp(current_stamp, now);
+  const auto stamp_result = time_processor_.validate_stamp(current_stamp, now);
   if (stamp_result == StampValidationResult::kInvalidStamp) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *clock, 5000, "%s: Invalid stamp (zero or negative), skipping", label);
@@ -301,7 +301,7 @@ bool HybridLocalizationNode::validate_stamp_and_order(
   if (stamp_result == StampValidationResult::kTooOld) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *clock, 5000, "%s: Delay %.3fs exceeds max %.3fs, skipping", label, delay,
-      m_node_params.time.max_delay);
+      node_params_.time.max_delay);
     return false;
   }
 
@@ -311,7 +311,7 @@ bool HybridLocalizationNode::validate_stamp_and_order(
     return false;
   }
 
-  if (m_time_processor.validate_order(last_stamp, current_stamp) ==
+  if (time_processor_.validate_order(last_stamp, current_stamp) ==
     OrderValidationResult::kOutOfOrderOrDuplicate)
   {
     const double dt = (current_stamp - last_stamp).seconds();
@@ -329,7 +329,7 @@ bool HybridLocalizationNode::validate_stamp_and_order(
   return true;
 }
 
-void HybridLocalizationNode::reset_imu_dt_stats() {m_imu_dt_stats.reset();}
+void HybridLocalizationNode::reset_imu_dt_stats() {imu_dt_stats_.reset();}
 
 } // namespace hybrid_localization
 

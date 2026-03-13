@@ -12,23 +12,23 @@ namespace hybrid_localization
 {
 
 ImuPreprocessor::ImuPreprocessor(const ImuPreprocessParams & t_params)
-: m_params(t_params),
-  m_gyro_lpf(t_params.gyro_lpf_cutoff_hz),
-  m_accel_lpf(t_params.accel_lpf_cutoff_hz) {}
+: params_(t_params),
+  gyro_lpf_(t_params.gyro_lpf_cutoff_hz),
+  accel_lpf_(t_params.accel_lpf_cutoff_hz) {}
 
 void ImuPreprocessor::set_params(const ImuPreprocessParams & t_params)
 {
   // 파라미터 갱신 시 필터 상태도 초기화
-  m_params = t_params;
-  m_gyro_lpf.set_cutoff_freq(t_params.gyro_lpf_cutoff_hz);
-  m_accel_lpf.set_cutoff_freq(t_params.accel_lpf_cutoff_hz);
+  params_ = t_params;
+  gyro_lpf_.set_cutoff_freq(t_params.gyro_lpf_cutoff_hz);
+  accel_lpf_.set_cutoff_freq(t_params.accel_lpf_cutoff_hz);
   reset_filters();
 }
 
 void ImuPreprocessor::reset_filters()
 {
-  m_gyro_lpf.reset();
-  m_accel_lpf.reset();
+  gyro_lpf_.reset();
+  accel_lpf_.reset();
 }
 
 void ImuPreprocessor::add_calibration_sample(const sensor_msgs::msg::Imu & msg)
@@ -44,12 +44,12 @@ void ImuPreprocessor::add_calibration_sample(const sensor_msgs::msg::Imu & msg)
     return; // Skip invalid samples
   }
 
-  m_gyro_samples.push_back(msg.angular_velocity);
-  m_accel_samples.push_back(msg.linear_acceleration);
+  gyro_samples_.push_back(msg.angular_velocity);
+  accel_samples_.push_back(msg.linear_acceleration);
 
   // Collect orientation samples if valid
   if (quat_utils::is_valid(msg.orientation)) {
-    m_orientation_samples.push_back(msg.orientation);
+    orientation_samples_.push_back(msg.orientation);
   }
 }
 
@@ -57,43 +57,43 @@ bool ImuPreprocessor::finalize_calibration(
   const std::string & calibration_file_path)
 {
   // 수집된 샘플을 평균화하여 캘리브레이션 값 계산
-  if (m_gyro_samples.empty() || m_accel_samples.empty()) {
+  if (gyro_samples_.empty() || accel_samples_.empty()) {
     return false;
   }
 
   // Compute mean of gyro samples (bias)
   geometry_msgs::msg::Vector3 gyro_mean{};
-  for (const auto & sample : m_gyro_samples) {
+  for (const auto & sample : gyro_samples_) {
     gyro_mean.x += sample.x;
     gyro_mean.y += sample.y;
     gyro_mean.z += sample.z;
   }
-  const double n_gyro = static_cast<double>(m_gyro_samples.size());
+  const double n_gyro = static_cast<double>(gyro_samples_.size());
   gyro_mean.x /= n_gyro;
   gyro_mean.y /= n_gyro;
   gyro_mean.z /= n_gyro;
 
   // Compute mean of accel samples (includes gravity)
   geometry_msgs::msg::Vector3 accel_mean{};
-  for (const auto & sample : m_accel_samples) {
+  for (const auto & sample : accel_samples_) {
     accel_mean.x += sample.x;
     accel_mean.y += sample.y;
     accel_mean.z += sample.z;
   }
-  const double n_accel = static_cast<double>(m_accel_samples.size());
+  const double n_accel = static_cast<double>(accel_samples_.size());
   accel_mean.x /= n_accel;
   accel_mean.y /= n_accel;
   accel_mean.z /= n_accel;
 
   // Store measured gravity (raw accel at rest = gravity in sensor frame)
-  m_calibration.measured_gravity = accel_mean;
+  calibration_.measured_gravity = accel_mean;
 
   // Compute orientation bias from measured gravity
   // This transforms IMU orientation to eskf_base_link frame
-  if (m_params.enable_orientation_calibration) {
-    m_calibration.orientation_bias =
+  if (params_.enable_orientation_calibration) {
+    calibration_.orientation_bias =
       compute_orientation_bias_from_gravity(accel_mean);
-    m_calibration.orientation_bias_valid = true;
+    calibration_.orientation_bias_valid = true;
   }
 
   // For accel bias: remove gravity component
@@ -104,19 +104,19 @@ bool ImuPreprocessor::finalize_calibration(
   geometry_msgs::msg::Vector3 expected_gravity{};
   expected_gravity.x = 0.0;
   expected_gravity.y = 0.0;
-  expected_gravity.z = m_params.gravity_magnitude;
+  expected_gravity.z = params_.gravity_magnitude;
 
   // The accel bias is the deviation from expected gravity
   // (assuming vehicle is stationary during calibration)
-  m_calibration.accel_bias.x = accel_mean.x - expected_gravity.x;
-  m_calibration.accel_bias.y = accel_mean.y - expected_gravity.y;
-  m_calibration.accel_bias.z = accel_mean.z - expected_gravity.z;
+  calibration_.accel_bias.x = accel_mean.x - expected_gravity.x;
+  calibration_.accel_bias.y = accel_mean.y - expected_gravity.y;
+  calibration_.accel_bias.z = accel_mean.z - expected_gravity.z;
 
   // Update calibration
-  m_calibration.gyro_bias = gyro_mean;
-  m_calibration.sample_count = m_gyro_samples.size();
-  m_calibration.calibration_temperature = 25.0;
-  m_calibration.valid = true;
+  calibration_.gyro_bias = gyro_mean;
+  calibration_.sample_count = gyro_samples_.size();
+  calibration_.calibration_temperature = 25.0;
+  calibration_.valid = true;
 
   // Save to file
   std::ofstream ofs(calibration_file_path);
@@ -131,29 +131,29 @@ bool ImuPreprocessor::finalize_calibration(
   ofs << "  y: " << gyro_mean.y << "\n";
   ofs << "  z: " << gyro_mean.z << "\n";
   ofs << "accel_bias:\n";
-  ofs << "  x: " << m_calibration.accel_bias.x << "\n";
-  ofs << "  y: " << m_calibration.accel_bias.y << "\n";
-  ofs << "  z: " << m_calibration.accel_bias.z << "\n";
+  ofs << "  x: " << calibration_.accel_bias.x << "\n";
+  ofs << "  y: " << calibration_.accel_bias.y << "\n";
+  ofs << "  z: " << calibration_.accel_bias.z << "\n";
   ofs << "measured_gravity:\n";
   ofs << "  x: " << accel_mean.x << "\n";
   ofs << "  y: " << accel_mean.y << "\n";
   ofs << "  z: " << accel_mean.z << "\n";
   ofs << "orientation_bias:\n";
-  ofs << "  x: " << m_calibration.orientation_bias.x << "\n";
-  ofs << "  y: " << m_calibration.orientation_bias.y << "\n";
-  ofs << "  z: " << m_calibration.orientation_bias.z << "\n";
-  ofs << "  w: " << m_calibration.orientation_bias.w << "\n";
+  ofs << "  x: " << calibration_.orientation_bias.x << "\n";
+  ofs << "  y: " << calibration_.orientation_bias.y << "\n";
+  ofs << "  z: " << calibration_.orientation_bias.z << "\n";
+  ofs << "  w: " << calibration_.orientation_bias.w << "\n";
   ofs << "orientation_bias_valid: "
-      << (m_calibration.orientation_bias_valid ? "true" : "false") << "\n";
-  ofs << "calibration_temperature: " << m_calibration.calibration_temperature
+      << (calibration_.orientation_bias_valid ? "true" : "false") << "\n";
+  ofs << "calibration_temperature: " << calibration_.calibration_temperature
       << "\n";
-  ofs << "sample_count: " << m_calibration.sample_count << "\n";
+  ofs << "sample_count: " << calibration_.sample_count << "\n";
   ofs.close();
 
   // Clear temporary buffers
-  m_gyro_samples.clear();
-  m_accel_samples.clear();
-  m_orientation_samples.clear();
+  gyro_samples_.clear();
+  accel_samples_.clear();
+  orientation_samples_.clear();
 
   // Reset filters for fresh start
   reset_filters();
@@ -311,14 +311,14 @@ bool ImuPreprocessor::load_calibration(
   ifs.close();
 
   // Update calibration
-  m_calibration.gyro_bias = gyro_bias;
-  m_calibration.accel_bias = accel_bias;
-  m_calibration.measured_gravity = measured_gravity;
-  m_calibration.orientation_bias = quat_utils::normalize(orientation_bias);
-  m_calibration.orientation_bias_valid = orientation_bias_valid;
-  m_calibration.calibration_temperature = calibration_temperature;
-  m_calibration.sample_count = sample_count;
-  m_calibration.valid = true;
+  calibration_.gyro_bias = gyro_bias;
+  calibration_.accel_bias = accel_bias;
+  calibration_.measured_gravity = measured_gravity;
+  calibration_.orientation_bias = quat_utils::normalize(orientation_bias);
+  calibration_.orientation_bias_valid = orientation_bias_valid;
+  calibration_.calibration_temperature = calibration_temperature;
+  calibration_.sample_count = sample_count;
+  calibration_.valid = true;
 
   // Reset filters for fresh start
   reset_filters();
@@ -368,8 +368,8 @@ void ImuPreprocessor::apply_lpf(
   geometry_msgs::msg::Vector3 & gyro_out,
   geometry_msgs::msg::Vector3 & accel_out)
 {
-  gyro_out = m_gyro_lpf.update(gyro_debiased, dt);
-  accel_out = m_accel_lpf.update(accel_debiased, dt);
+  gyro_out = gyro_lpf_.update(gyro_debiased, dt);
+  accel_out = accel_lpf_.update(accel_debiased, dt);
 }
 
 void ImuPreprocessor::remove_gravity_and_calibrate_orientation(
@@ -381,20 +381,20 @@ void ImuPreprocessor::remove_gravity_and_calibrate_orientation(
   accel_out = accel_filtered;
   q_calibrated_out = quat_utils::identity();
 
-  if (!m_params.enable_gravity_removal) {
+  if (!params_.enable_gravity_removal) {
     return;
   }
 
   if (!quat_utils::is_valid(msg.orientation)) {
     // 유효한 자세가 없으면 수평 가정: Z 방향으로만 중력 제거
-    accel_out.z -= m_params.gravity_magnitude;
+    accel_out.z -= params_.gravity_magnitude;
     return;
   }
 
   // 자세 교정: q_calibrated = q_imu * q_bias_inv
   auto q_imu = quat_utils::normalize(msg.orientation);
-  if (m_calibration.orientation_bias_valid && m_params.enable_orientation_calibration) {
-    auto q_bias_inv = quat_utils::conjugate(m_calibration.orientation_bias);
+  if (calibration_.orientation_bias_valid && params_.enable_orientation_calibration) {
+    auto q_bias_inv = quat_utils::conjugate(calibration_.orientation_bias);
     q_calibrated_out = quat_utils::normalize(quat_utils::multiply(q_imu, q_bias_inv));
   } else {
     q_calibrated_out = q_imu;
@@ -402,7 +402,7 @@ void ImuPreprocessor::remove_gravity_and_calibrate_orientation(
 
   // 중력 제거: g_sensor = R^(-1) * [0, 0, g]_world
   geometry_msgs::msg::Vector3 gravity_world{};
-  gravity_world.z = m_params.gravity_magnitude;  // ENU: +Z up
+  gravity_world.z = params_.gravity_magnitude;  // ENU: +Z up
   auto q_inv = quat_utils::conjugate(q_calibrated_out);
   const auto gravity_sensor = quat_utils::rotate_vector(q_inv, gravity_world);
 
@@ -433,7 +433,7 @@ ImuPreprocessStatus ImuPreprocessor::preprocess(
 {
   out = ImuPreprocessResult{};
 
-  if (!m_calibration.valid) {
+  if (!calibration_.valid) {
     return ImuPreprocessStatus::kNoCalibration;
   }
 
@@ -448,7 +448,7 @@ ImuPreprocessStatus ImuPreprocessor::preprocess(
   // Step 2: 바이어스 제거
   geometry_msgs::msg::Vector3 gyro_debiased, accel_debiased;
   remove_bias(
-    msg.angular_velocity, msg.linear_acceleration, m_calibration,
+    msg.angular_velocity, msg.linear_acceleration, calibration_,
     gyro_debiased, accel_debiased);
 
   // Step 3: LPF 적용
