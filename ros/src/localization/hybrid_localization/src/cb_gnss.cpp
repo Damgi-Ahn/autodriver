@@ -703,6 +703,37 @@ void HybridLocalizationNode::gnss_callback(
             if (current_stamp > m_state_stamp) {
               m_state_stamp = current_stamp;
             }
+
+            // FGO Stage 3: 위치 측정값 캐시 (키프레임 생성 시 소비됨)
+            {
+              GnssMeasurement fgo_gnss;
+              fgo_gnss.stamp_sec = current_stamp.seconds();
+              fgo_gnss.pos_map = z_p_map;
+              fgo_gnss.status = gnss_status;
+
+              // NavSatFix 공분산 추출 (행 우선, ENU x,y,z 순서)
+              const auto & cov_arr = t_msg->position_covariance;
+              if (t_msg->position_covariance_type !=
+                sensor_msgs::msg::NavSatFix::COVARIANCE_TYPE_UNKNOWN)
+              {
+                Eigen::Matrix3d pos_cov;
+                pos_cov << cov_arr[0], cov_arr[1], cov_arr[2],
+                  cov_arr[3], cov_arr[4], cov_arr[5],
+                  cov_arr[6], cov_arr[7], cov_arr[8];
+                // covariance_scale 적용 (ESKF 와 동일한 스케일링)
+                pos_cov *= gnss_params.cov_scale;
+                fgo_gnss.pos_cov = pos_cov;
+              }
+
+              // 이미 heading이 있으면 추가
+              if (m_heading_received) {
+                fgo_gnss.has_heading = true;
+                fgo_gnss.heading_rad = m_latest_heading_yaw_rad;
+                fgo_gnss.heading_var = m_node_params.heading.yaw_var;
+              }
+
+              m_latest_fgo_gnss_ = fgo_gnss;
+            }
           }
         }
       }
@@ -830,6 +861,16 @@ void HybridLocalizationNode::gnss_vel_callback(
 
             if (current_stamp > m_state_stamp) {
               m_state_stamp = current_stamp;
+            }
+
+            // FGO Stage 3: 속도 측정값을 캐시된 GNSS 측정값에 추가
+            if (m_latest_fgo_gnss_.has_value()) {
+              const double vel_var =
+                m_node_params.gnss.vel_var_fallback * effective_inflate;
+              m_latest_fgo_gnss_->has_velocity = true;
+              m_latest_fgo_gnss_->vel_map = z_v_map;
+              m_latest_fgo_gnss_->vel_cov =
+                Eigen::Matrix3d::Identity() * vel_var;
             }
           }
           }

@@ -9,6 +9,9 @@
 
 #include <rclcpp/time.hpp>
 
+#include <boost/shared_ptr.hpp>
+#include <gtsam/navigation/CombinedImuFactor.h>
+
 #include "hybrid_localization/eskf/eskf_core.hpp"
 #include "hybrid_localization/fgo/imu_preintegration.hpp"
 #include "hybrid_localization/types.hpp"
@@ -29,8 +32,11 @@ struct Keyframe
   // 오차 상태 공분산 (15×15)
   EskfCore::P15 P{EskfCore::P15::Zero()};
 
-  // 직전 키프레임에서 이 키프레임까지 IMU 사전적분
+  // 직전 키프레임에서 이 키프레임까지 IMU 사전적분 (ESKF 바이어스 재선형화용)
   ImuPreintegration preint{};
+
+  // GTSAM CombinedImuFactor 입력 (null = 첫 번째 키프레임)
+  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements> gtsam_preint{};
 
   // 키프레임 인덱스 (단조 증가)
   uint64_t index{0};

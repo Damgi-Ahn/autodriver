@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include <gtsam/base/Vector.h>
+
 namespace hybrid_localization
 {
 
@@ -76,13 +78,21 @@ void HybridLocalizationNode::imu_callback(
         m_eskf.propagate(omega, accel, dt);
         m_state_stamp = current_stamp;
 
-        // FGO Stage 2: raw IMU를 사전적분 버퍼에 누적
+        // FGO Stage 2+3: raw IMU를 사전적분 버퍼에 누적
         // raw gyro/accel: 전처리(LPF/중력제거) 이전 값을 사용해 정밀도 유지
         const Eigen::Vector3d gyro_raw(t_msg->angular_velocity.x,
           t_msg->angular_velocity.y, t_msg->angular_velocity.z);
         const Eigen::Vector3d accel_raw(t_msg->linear_acceleration.x,
           t_msg->linear_acceleration.y, t_msg->linear_acceleration.z);
         m_imu_preint.push(gyro_raw, accel_raw, dt);
+
+        // GTSAM 사전적분 누적 (FGO CombinedImuFactor 입력)
+        if (m_gtsam_preint_) {
+          m_gtsam_preint_->integrateMeasurement(
+            gtsam::Vector3(gyro_raw.x(), gyro_raw.y(), gyro_raw.z()),
+            gtsam::Vector3(accel_raw.x(), accel_raw.y(), accel_raw.z()),
+            dt);
+        }
 
         // 키프레임 생성 여부 확인
         NominalState cur_state;

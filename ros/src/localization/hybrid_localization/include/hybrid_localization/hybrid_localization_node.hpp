@@ -4,7 +4,10 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+
+#include <boost/shared_ptr.hpp>
 
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_ros/buffer.h>
@@ -29,6 +32,7 @@
 #include "hybrid_localization/eskf/eskf_core.hpp"
 #include "hybrid_localization/eskf/gnss_update_handler.hpp"
 #include "hybrid_localization/eskf/odom_builder.hpp"
+#include "hybrid_localization/fgo/fgo_backend.hpp"
 #include "hybrid_localization/fgo/imu_preintegration.hpp"
 #include "hybrid_localization/fgo/keyframe_buffer.hpp"
 #include "hybrid_localization/parameters.hpp"
@@ -246,6 +250,14 @@ private:
   // m_state_mutex 로 보호 (ESKF 상태와 동일 뮤텍스)
   KeyframeBuffer m_keyframe_buffer{20};
   ImuPreintegration m_imu_preint{};    // 진행 중인 사전적분 (현재 ~ 다음 키프레임)
+
+  // ---- FGO Stage 3: GTSAM ISAM2 FGO 백엔드 -------------------------------
+  FgoBackend m_fgo_backend;
+  // GTSAM IMU 사전적분 (키프레임 사이 raw IMU 누적, FgoBackend 와 공유 params 사용)
+  boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements> m_gtsam_preint_;
+
+  // 최신 FGO 용 GNSS 측정값 (m_state_mutex 보호)
+  std::optional<GnssMeasurement> m_latest_fgo_gnss_;
 
   // 키프레임 생성 후 내부 헬퍼
   void maybe_push_keyframe(

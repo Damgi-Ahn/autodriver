@@ -280,6 +280,24 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     "fgo.keyframe.min_interval_sec", keyframe.min_interval_sec);
   keyframe.max_interval_sec = node.declare_parameter(
     "fgo.keyframe.max_interval_sec", keyframe.max_interval_sec);
+
+  // --- FGO Stage 3: ISAM2 백엔드 파라미터 ---
+  fgo_backend.window_size = node.declare_parameter(
+    "fgo.backend.window_size", fgo_backend.window_size);
+  fgo_backend.prior_pos_noise_m = node.declare_parameter(
+    "fgo.backend.prior_pos_noise_m", fgo_backend.prior_pos_noise_m);
+  fgo_backend.prior_yaw_noise_rad = node.declare_parameter(
+    "fgo.backend.prior_yaw_noise_rad", fgo_backend.prior_yaw_noise_rad);
+  fgo_backend.prior_vel_noise_mps = node.declare_parameter(
+    "fgo.backend.prior_vel_noise_mps", fgo_backend.prior_vel_noise_mps);
+  fgo_backend.nhc_lat_noise_mps = node.declare_parameter(
+    "fgo.backend.nhc_lat_noise_mps", fgo_backend.nhc_lat_noise_mps);
+  fgo_backend.nhc_vert_noise_mps = node.declare_parameter(
+    "fgo.backend.nhc_vert_noise_mps", fgo_backend.nhc_vert_noise_mps);
+  fgo_backend.gnss_min_status_for_pos = node.declare_parameter(
+    "fgo.backend.gnss_min_status_for_pos", fgo_backend.gnss_min_status_for_pos);
+  fgo_backend.gnss_min_status_for_vel = node.declare_parameter(
+    "fgo.backend.gnss_min_status_for_vel", fgo_backend.gnss_min_status_for_vel);
 }
 
 } // namespace hybrid_localization

@@ -9,6 +9,7 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 find_package(Eigen3 REQUIRED)
+find_package(GTSAM REQUIRED)
 
 # --- ESKF 코어 라이브러리 (ROS 의존성 없음, 재사용 가능) ---
 ament_auto_add_library(eskf_core SHARED
@@ -56,7 +57,17 @@ target_include_directories(fgo_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(fgo_core Eigen3::Eigen)
+target_link_libraries(fgo_core Eigen3::Eigen gtsam)
+
+# --- FGO 백엔드 라이브러리 (Stage 3: GTSAM ISAM2 슬라이딩 윈도우) ---
+ament_auto_add_library(fgo_backend SHARED
+  src/fgo/fgo_backend.cpp
+)
+target_include_directories(fgo_backend PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(fgo_backend fgo_core Eigen3::Eigen gtsam)
 
 # --- 노드 실행 파일 ---
 ament_auto_add_executable(hybrid_localization_node
@@ -78,7 +89,9 @@ target_link_libraries(hybrid_localization_node
   localization_preprocess
   localization_util
   fgo_core
+  fgo_backend
   Eigen3::Eigen
+  gtsam
 )
 
 # --- 설치 ---
@@ -87,6 +100,7 @@ install(TARGETS
   localization_preprocess
   localization_util
   fgo_core
+  fgo_backend
   hybrid_localization_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -104,6 +118,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_imu_preintegration test/test_imu_preintegration.cpp)
   target_link_libraries(test_imu_preintegration fgo_core Eigen3::Eigen)
+
+  ament_add_gtest(test_fgo_backend test/test_fgo_backend.cpp)
+  target_link_libraries(test_fgo_backend fgo_backend fgo_core Eigen3::Eigen gtsam)
 endif()
 
 ament_auto_package()

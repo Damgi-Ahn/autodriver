@@ -67,6 +67,29 @@ struct ImuMeasurement
   double dt{0.0};                                         // [s] 이전 샘플과의 간격
 };
 
+// FGO 입력: 단일 GNSS 측정값 (map 프레임 기준)
+struct GnssMeasurement
+{
+  double stamp_sec{0.0};
+
+  // 위치 (map 프레임, base_link 레버암 보정 후)
+  Eigen::Vector3d pos_map{Eigen::Vector3d::Zero()};
+  Eigen::Matrix3d pos_cov{Eigen::Matrix3d::Identity() * 0.25};  // [m^2]
+
+  // 속도 (map 프레임)
+  bool has_velocity{false};
+  Eigen::Vector3d vel_map{Eigen::Vector3d::Zero()};
+  Eigen::Matrix3d vel_cov{Eigen::Matrix3d::Identity() * 0.01};  // [(m/s)^2]
+
+  // 헤딩 (ENU yaw, CCW from East, rad)
+  bool has_heading{false};
+  double heading_rad{0.0};
+  double heading_var{0.01};  // [rad^2]
+
+  // GNSS fix status (sensor_msgs NavSatFix status convention: -1=no fix, 0=fix, 1=sbas, 2=gbas)
+  int status{-1};
+};
+
 // TF 캐시: base_link ↔ sensor 변환
 struct ExtrinsicCache
 {

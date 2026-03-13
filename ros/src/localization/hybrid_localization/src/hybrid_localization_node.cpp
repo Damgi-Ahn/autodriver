@@ -4,6 +4,10 @@
 #include <cmath>
 #include <cstring>
 
+#include <boost/make_shared.hpp>
+#include <gtsam/navigation/CombinedImuFactor.h>
+#include <gtsam/navigation/ImuBias.h>
+
 namespace hybrid_localization
 {
 
@@ -34,7 +38,15 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
 
   // FGO Stage 2: ImuPreintegration 파라미터 적용 및 초기화
   m_imu_preint = ImuPreintegration(m_node_params.imu_preint);
-  m_keyframe_buffer.set_max_size(20);  // TODO: 파라미터화 (fgo.window_size)
+  m_keyframe_buffer.set_max_size(
+    static_cast<size_t>(m_node_params.fgo_backend.window_size));
+
+  // FGO Stage 3: ISAM2 백엔드 + GTSAM IMU 사전적분 초기화
+  m_fgo_backend.initialize(m_node_params.fgo_backend, m_node_params.imu_preint);
+  m_gtsam_preint_ =
+    boost::make_shared<gtsam::PreintegratedCombinedMeasurements>(
+    m_fgo_backend.gtsam_preint_params(),
+    gtsam::imuBias::ConstantBias{});
 
   const auto & io = m_node_params.io;
   OdomBuilderConfig odom_config;
@@ -197,11 +209,41 @@ void HybridLocalizationNode::maybe_push_keyframe(
   kf.stamp = stamp;
   kf.state = state;
   kf.P = P;
-  kf.preint = m_imu_preint;  // 이전 키프레임 이후 누적된 적분값
+  kf.preint = m_imu_preint;  // ESKF 재선형화용 사전적분
+
+  // FGO Stage 3: GTSAM 사전적분 스냅샷 저장 (null = 첫 키프레임)
+  if (m_gtsam_preint_ && m_gtsam_preint_->deltaTij() > 0.0) {
+    kf.gtsam_preint = boost::make_shared<gtsam::PreintegratedCombinedMeasurements>(
+      *m_gtsam_preint_);
+  }
 
   m_keyframe_buffer.push(kf);
 
-  // 새 사전적분 시작: 현재 바이어스를 선형화 기준점으로 설정
+  // FGO Stage 3: 새 키프레임으로 그래프 업데이트
+  if (m_fgo_backend.is_initialized()) {
+    const auto result = m_fgo_backend.update(kf, m_latest_fgo_gnss_);
+    m_latest_fgo_gnss_.reset();  // 사용 후 소비
+
+    if (result.valid) {
+      RCLCPP_DEBUG(
+        this->get_logger(),
+        "FGO update: kf=%lu  p=(%.2f, %.2f, %.2f)",
+        result.keyframe_index,
+        result.state.p_map.x(),
+        result.state.p_map.y(),
+        result.state.p_map.z());
+    }
+  }
+
+  // GTSAM 사전적분 리셋 (새 바이어스 추정값 기준)
+  if (m_gtsam_preint_) {
+    m_gtsam_preint_->resetIntegrationAndSetBias(
+      gtsam::imuBias::ConstantBias(
+        gtsam::Vector3(state.b_a.x(), state.b_a.y(), state.b_a.z()),
+        gtsam::Vector3(state.b_g.x(), state.b_g.y(), state.b_g.z())));
+  }
+
+  // ESKF 사전적분 리셋
   m_imu_preint.reset(state.b_g, state.b_a);
 }
 

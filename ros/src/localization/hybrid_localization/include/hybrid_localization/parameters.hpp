@@ -6,6 +6,7 @@
 #include <rclcpp/node.hpp>
 
 #include "hybrid_localization/eskf/eskf_core.hpp"
+#include "hybrid_localization/fgo/fgo_backend.hpp"
 #include "hybrid_localization/fgo/imu_preintegration.hpp"
 #include "hybrid_localization/fgo/keyframe_buffer.hpp"
 #include "hybrid_localization/preprocess/gnss_heading_arbitrator.hpp"
@@ -238,9 +239,12 @@ struct HybridLocalizationNodeParams
   OutputParams output{};
   LocalizationInitParams init{};
 
-  // FGO 백엔드 파라미터
+  // FGO Stage 2: IMU 사전적분 + 키프레임 선택
   ImuPreintegration::Params imu_preint{};
   KeyframeSelectionParams keyframe{};
+
+  // FGO Stage 3: ISAM2 백엔드
+  FgoBackend::Params fgo_backend{};
 
   // 캘리브레이션 관련
   bool init_imu_calibration{false};
