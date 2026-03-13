@@ -45,6 +45,14 @@ struct FdGuard {
   ~FdGuard() { if (fd >= 0) ::close(fd); }
   FdGuard(const FdGuard&)            = delete;
   FdGuard& operator=(const FdGuard&) = delete;
+  FdGuard(FdGuard&& other) noexcept : fd(other.fd) { other.fd = -1; }
+  FdGuard& operator=(FdGuard&& other) noexcept {
+    if (this == &other) return *this;
+    if (fd >= 0) ::close(fd);
+    fd = other.fd;
+    other.fd = -1;
+    return *this;
+  }
   operator int() const { return fd; }  // NOLINT(google-explicit-constructor)
 };
 

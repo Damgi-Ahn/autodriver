@@ -84,10 +84,14 @@ find_package_handle_standard_args(AutodriverCUDA
     CUDAToolkit_LIBRARY_DIR
   VERSION_VAR
     AutodriverCUDA_VERSION
-  FAIL_MESSAGE
-    "Could not find CUDA >= ${AutodriverCUDA_MIN_VERSION}. "
-    "Set CUDAToolkit_ROOT to the CUDA installation directory."
 )
+
+if(NOT AutodriverCUDA_FOUND AND NOT AutodriverCUDA_FIND_REQUIRED)
+  message(STATUS
+    "FindAutodriverCUDA: CUDA >= ${AutodriverCUDA_MIN_VERSION} not found. "
+    "Set CUDAToolkit_ROOT to the CUDA installation directory to enable CUDA builds."
+  )
+endif()
 
 # ── Imported target: Autodriver::CUDA ────────────────────────────────────────
 if(AutodriverCUDA_FOUND AND NOT TARGET Autodriver::CUDA)

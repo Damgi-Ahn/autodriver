@@ -8,7 +8,7 @@ include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()
 
 # ── Library ───────────────────────────────────────────────────────────────────
-add_library(${PROJECT_NAME} SHARED
+ament_auto_add_library(${PROJECT_NAME} SHARED
   src/ipc_unix_socket.cpp
 )
 autodriver_set_compiler_options(${PROJECT_NAME})
@@ -34,22 +34,7 @@ if(BUILD_TESTING)
 endif()
 
 # ── Install ───────────────────────────────────────────────────────────────────
-install(
-  TARGETS ${PROJECT_NAME}
-  EXPORT  ${PROJECT_NAME}Targets
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
+ament_auto_package(
+  INSTALL_TO_SHARE
+  include
 )
-install(DIRECTORY include/ DESTINATION include)
-install(
-  EXPORT ${PROJECT_NAME}Targets
-  FILE   ${PROJECT_NAME}Targets.cmake
-  NAMESPACE autodriver::
-  DESTINATION lib/cmake/${PROJECT_NAME}
-)
-
-ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-ament_export_include_directories(include)
-ament_auto_package()

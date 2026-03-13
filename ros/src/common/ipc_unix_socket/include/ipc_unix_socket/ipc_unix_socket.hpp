@@ -26,6 +26,7 @@ namespace autodriver::ipc {
 // FrameMeta — fixed-size POD transmitted alongside every DMABUF fd.
 // ABI-stable: do not reorder fields or add virtual members.
 // ---------------------------------------------------------------------------
+#pragma pack(push, 4)
 struct FrameMeta {
   uint32_t camera_id;  ///< Source camera index [0, 11]
   uint64_t timestamp;  ///< CLOCK_MONOTONIC nanoseconds
@@ -33,6 +34,7 @@ struct FrameMeta {
   uint32_t height;     ///< Frame height in pixels
   uint32_t format;     ///< NvBufSurfaceColorFormat cast to uint32_t
 };
+#pragma pack(pop)
 
 static_assert(sizeof(FrameMeta) == 24,
               "FrameMeta layout changed — synchronise sender and receiver");
