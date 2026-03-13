@@ -62,6 +62,11 @@ Eigen::Matrix3d ImuPreintegration::right_jacobian(const Eigen::Vector3d & phi)
 // ImuPreintegration 구현
 // ---------------------------------------------------------------------------
 
+ImuPreintegration::ImuPreintegration()
+: ImuPreintegration(Params{})
+{
+}
+
 ImuPreintegration::ImuPreintegration(const Params & params)
 : params_(params)
 {

@@ -127,7 +127,7 @@ TEST(ImuPreintegration, CovarianceGrows)
   }
 
   EXPECT_GT(preint.covariance().trace(), trace_before);
-  EXPECT_TRUE(preint.covariance().isFinite());
+  EXPECT_TRUE(preint.covariance().allFinite());
 }
 
 // ---------------------------------------------------------------------------

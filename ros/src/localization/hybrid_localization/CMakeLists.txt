@@ -115,17 +115,17 @@ install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
 # --- 테스트 ---
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_eskf_core test/test_eskf_core.cpp)
+  ament_auto_add_gtest(test_eskf_core test/test_eskf_core.cpp)
   target_link_libraries(test_eskf_core eskf_core Eigen3::Eigen)
 
-  ament_add_gtest(test_imu_preintegration test/test_imu_preintegration.cpp)
+  ament_auto_add_gtest(test_imu_preintegration test/test_imu_preintegration.cpp)
   target_link_libraries(test_imu_preintegration fgo_core Eigen3::Eigen)
 
-  ament_add_gtest(test_fgo_backend test/test_fgo_backend.cpp)
+  ament_auto_add_gtest(test_fgo_backend test/test_fgo_backend.cpp)
   target_link_libraries(test_fgo_backend fgo_backend fgo_core Eigen3::Eigen gtsam)
 
-  ament_add_gtest(test_eskf_corrector test/test_eskf_corrector.cpp)
+  ament_auto_add_gtest(test_eskf_corrector test/test_eskf_corrector.cpp)
   target_link_libraries(test_eskf_corrector fgo_backend fgo_core eskf_core Eigen3::Eigen gtsam)
 endif()
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

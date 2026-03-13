@@ -38,7 +38,8 @@ public:
     Eigen::Vector3d gravity_map{0.0, 0.0, -9.80665};  // map 프레임 중력 벡터
   };
 
-  explicit ImuPreintegration(const Params & params = Params{});
+  ImuPreintegration();
+  explicit ImuPreintegration(const Params & params);
 
   // 선형화 기준점 바이어스를 설정하고 상태 초기화
   void reset(
