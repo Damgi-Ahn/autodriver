@@ -1,0 +1,92 @@
+/**:
+  ros__parameters:
+    # -----------------------------------------------------------------------
+    # I/O
+    # -----------------------------------------------------------------------
+    map_frame: "map"
+    base_frame: "base_link"
+    imu_topic: "/sensing/imu/imu_raw"
+    gnss_topic: "/sensing/gnss/navsatfix"
+    gnss_vel_topic: "/sensing/gnss/vel"
+    heading_topic: "/sensing/gnss/heading"
+    map_projector_info_topic: "/map/map_projector_info"
+    velocity_topic: "/vehicle/status/velocity_status"
+    steering_topic: "/vehicle/status/steering_status"
+    output_odom_topic: "/localization/kinematic_state"
+    publish_tf: true
+    publish_rate: 200.0
+
+    # -----------------------------------------------------------------------
+    # 초기화
+    # -----------------------------------------------------------------------
+    init_mode: "auto"                   # "auto" | "external_initialpose"
+    require_trigger: false
+    external_initialpose_topic: "/initialpose3d"
+    init_imu_calibration: false
+    calibration_file_path: ""
+
+    # -----------------------------------------------------------------------
+    # IMU 전처리
+    # -----------------------------------------------------------------------
+    imu_gyro_lpf_cutoff_hz: 10.0
+    imu_accel_lpf_cutoff_hz: 10.0
+    imu_gravity_magnitude: 9.80665
+    imu_enable_gravity_removal: false
+    imu_enable_orientation_calibration: false
+
+    # -----------------------------------------------------------------------
+    # ESKF 프로세스 노이즈
+    # -----------------------------------------------------------------------
+    eskf_gyro_noise_std: 0.05         # [rad/s/√Hz]
+    eskf_accel_noise_std: 1.0         # [m/s²/√Hz]
+    eskf_gyro_bias_noise_std: 1.0e-4  # [rad/s²/√Hz]
+    eskf_accel_bias_noise_std: 1.0e-3 # [m/s³/√Hz]
+    eskf_use_accel_propagation: false  # 가속도계 전파 비활성 (기존 정책 유지)
+
+    # NIS 게이팅
+    eskf_nis_gate_gnss_pos_3d: 11.34  # χ²(3-DOF, 99%)
+    eskf_nis_gate_gnss_vel_3d: 11.34
+    eskf_nis_gate_heading_yaw: 6.63   # χ²(1-DOF, 99%)
+    eskf_nis_gate_inflate: true
+    eskf_nis_gate_inflate_max: 10000.0
+    eskf_r_eff_decay_tau_updates: 50.0
+
+    # -----------------------------------------------------------------------
+    # GNSS
+    # -----------------------------------------------------------------------
+    gnss_cov_scale: 1.0
+    gnss_pos_var_fallback: 4.0        # [m²]
+    gnss_vel_var_fallback: 0.25       # [(m/s)²]
+    gnss_use_navsatfix_covariance: true
+    gnss_publish_pose_with_covariance: false
+    gnss_pose_with_covariance_topic: "/localization/pose_with_covariance"
+
+    # status 기반 inflate (status == -1이면 스킵)
+    gnss_pos_inflate_status_fix: 1.0
+    gnss_pos_inflate_status_sbas: 100.0
+    gnss_vel_inflate_status_fix: 1.0
+    gnss_vel_inflate_status_sbas: 10.0
+
+    # 복구 holdoff/ramp
+    gnss_recover_holdoff_sec: 1.0
+    gnss_recover_ramp_sec: 5.0
+
+    # -----------------------------------------------------------------------
+    # GNSS 방위 (Gphdt)
+    # -----------------------------------------------------------------------
+    heading_yaw_var: 0.01             # [rad²]
+    heading_max_rate_radps: 1.0
+    heading_use_gnss_heading: true
+    heading_arbitrator_gphdt_recover_holdoff_sec: 1.0
+
+    # -----------------------------------------------------------------------
+    # 차량 제약 (NHC / ZUPT / 요레이트)
+    # -----------------------------------------------------------------------
+    vehicle_speed_var: 0.01           # [(m/s)²]
+    vehicle_nhc_var: 0.05             # [(m/s)²] side/vertical velocity
+    vehicle_nhc_min_speed_mps: 0.3
+    vehicle_zupt_var: 0.01
+    vehicle_zupt_max_speed_mps: 0.1
+    vehicle_wheelbase_m: 2.85
+    vehicle_steer_yaw_rate_var: 0.01
+    vehicle_steer_min_speed_mps: 1.0
