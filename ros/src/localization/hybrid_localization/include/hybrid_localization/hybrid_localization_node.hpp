@@ -29,6 +29,8 @@
 #include "hybrid_localization/eskf/eskf_core.hpp"
 #include "hybrid_localization/eskf/gnss_update_handler.hpp"
 #include "hybrid_localization/eskf/odom_builder.hpp"
+#include "hybrid_localization/fgo/imu_preintegration.hpp"
+#include "hybrid_localization/fgo/keyframe_buffer.hpp"
 #include "hybrid_localization/parameters.hpp"
 #include "hybrid_localization/preprocess/gnss_heading_arbitrator.hpp"
 #include "hybrid_localization/preprocess/gnss_preprocessor.hpp"
@@ -239,6 +241,17 @@ private:
   rclcpp::Time m_heading_recover_last_stamp_{0, 0, RCL_ROS_TIME};
   double m_heading_recover_inflate_{1.0};
   double m_heading_status_inflate_{1.0};
+
+  // ---- FGO Stage 2: KeyframeBuffer + ImuPreintegration --------------------
+  // m_state_mutex 로 보호 (ESKF 상태와 동일 뮤텍스)
+  KeyframeBuffer m_keyframe_buffer{20};
+  ImuPreintegration m_imu_preint{};    // 진행 중인 사전적분 (현재 ~ 다음 키프레임)
+
+  // 키프레임 생성 후 내부 헬퍼
+  void maybe_push_keyframe(
+    const rclcpp::Time & stamp,
+    const NominalState & state,
+    const EskfCore::P15 & P);
 };
 
 }  // namespace hybrid_localization

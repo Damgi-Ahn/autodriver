@@ -259,6 +259,27 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     "eskf.max_correction_att_rad", eskf.max_correction_att_rad);
   eskf.use_so3_jacobian_reset = node.declare_parameter(
     "eskf.use_so3_jacobian_reset", eskf.use_so3_jacobian_reset);
+
+  // FGO: IMU 사전적분 노이즈 (ESKF 프로세스 노이즈와 동일 값 사용)
+  imu_preint.gyro_noise_std = node.declare_parameter(
+    "fgo.imu_preint.gyro_noise_std", eskf.gyro_noise_std);
+  imu_preint.accel_noise_std = node.declare_parameter(
+    "fgo.imu_preint.accel_noise_std", eskf.accel_noise_std);
+  imu_preint.gyro_bias_rw_std = node.declare_parameter(
+    "fgo.imu_preint.gyro_bias_rw_std", eskf.gyro_bias_noise_std);
+  imu_preint.accel_bias_rw_std = node.declare_parameter(
+    "fgo.imu_preint.accel_bias_rw_std", eskf.accel_bias_noise_std);
+
+  // FGO: 키프레임 선택 정책
+  keyframe.min_dist_m = node.declare_parameter(
+    "fgo.keyframe.min_dist_m", keyframe.min_dist_m);
+  keyframe.min_angle_rad = node.declare_parameter(
+    "fgo.keyframe.min_angle_deg", keyframe.min_angle_rad * 180.0 / M_PI)
+    * M_PI / 180.0;
+  keyframe.min_interval_sec = node.declare_parameter(
+    "fgo.keyframe.min_interval_sec", keyframe.min_interval_sec);
+  keyframe.max_interval_sec = node.declare_parameter(
+    "fgo.keyframe.max_interval_sec", keyframe.max_interval_sec);
 }
 
 } // namespace hybrid_localization

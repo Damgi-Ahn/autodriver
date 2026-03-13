@@ -32,6 +32,10 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
 
   load_parameters(); // 파라미터 로딩은 별도 로더에서 일괄 처리
 
+  // FGO Stage 2: ImuPreintegration 파라미터 적용 및 초기화
+  m_imu_preint = ImuPreintegration(m_node_params.imu_preint);
+  m_keyframe_buffer.set_max_size(20);  // TODO: 파라미터화 (fgo.window_size)
+
   const auto & io = m_node_params.io;
   OdomBuilderConfig odom_config;
   odom_config.map_frame = io.map_frame;
@@ -175,6 +179,30 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
   RCLCPP_INFO(
     this->get_logger(), "Hybrid Localization Node ready (publish_rate=%.0f Hz, threads=3)",
     rate_hz);
+}
+
+void HybridLocalizationNode::maybe_push_keyframe(
+  const rclcpp::Time & stamp,
+  const NominalState & state,
+  const EskfCore::P15 & P)
+{
+  // m_state_mutex 가 이미 잠긴 상태에서 호출된다.
+  if (!m_keyframe_buffer.should_create_keyframe(
+      stamp, state, m_node_params.keyframe))
+  {
+    return;
+  }
+
+  Keyframe kf;
+  kf.stamp = stamp;
+  kf.state = state;
+  kf.P = P;
+  kf.preint = m_imu_preint;  // 이전 키프레임 이후 누적된 적분값
+
+  m_keyframe_buffer.push(kf);
+
+  // 새 사전적분 시작: 현재 바이어스를 선형화 기준점으로 설정
+  m_imu_preint.reset(state.b_g, state.b_a);
 }
 
 bool HybridLocalizationNode::validate_stamp_and_order(

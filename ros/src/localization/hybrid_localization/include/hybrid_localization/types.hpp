@@ -3,6 +3,9 @@
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
 #include <string>
 
 namespace hybrid_localization
@@ -43,6 +46,25 @@ struct TimeProcessingParams
   double future_tolerance{0.1};  // [s] 미래 타임스탬프 허용 한계
   double min_dt{1.0e-4};         // [s] dt 클램프 하한
   double max_dt{0.5};            // [s] dt 클램프 상한
+};
+
+// ESKF 명목 상태 (15-DOF)
+struct NominalState
+{
+  Eigen::Vector3d p_map{Eigen::Vector3d::Zero()};       // 위치 [m]
+  Eigen::Vector3d v_map{Eigen::Vector3d::Zero()};       // 속도 [m/s]
+  Eigen::Quaterniond q_map_from_base{Eigen::Quaterniond::Identity()};  // 자세
+  Eigen::Vector3d b_g{Eigen::Vector3d::Zero()};         // 자이로 바이어스 [rad/s]
+  Eigen::Vector3d b_a{Eigen::Vector3d::Zero()};         // 가속도계 바이어스 [m/s²]
+};
+
+// 단일 IMU 측정값 (바이어스 보정 전, raw)
+struct ImuMeasurement
+{
+  double stamp_sec{0.0};
+  Eigen::Vector3d gyro_radps{Eigen::Vector3d::Zero()};   // raw angular velocity
+  Eigen::Vector3d accel_mps2{Eigen::Vector3d::Zero()};   // raw linear acceleration
+  double dt{0.0};                                         // [s] 이전 샘플과의 간격
 };
 
 // TF 캐시: base_link ↔ sensor 변환

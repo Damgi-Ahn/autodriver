@@ -6,6 +6,8 @@
 #include <rclcpp/node.hpp>
 
 #include "hybrid_localization/eskf/eskf_core.hpp"
+#include "hybrid_localization/fgo/imu_preintegration.hpp"
+#include "hybrid_localization/fgo/keyframe_buffer.hpp"
 #include "hybrid_localization/preprocess/gnss_heading_arbitrator.hpp"
 #include "hybrid_localization/preprocess/imu_preprocessor.hpp"
 #include "hybrid_localization/types.hpp"
@@ -235,6 +237,10 @@ struct HybridLocalizationNodeParams
   GnssParams gnss{};
   OutputParams output{};
   LocalizationInitParams init{};
+
+  // FGO 백엔드 파라미터
+  ImuPreintegration::Params imu_preint{};
+  KeyframeSelectionParams keyframe{};
 
   // 캘리브레이션 관련
   bool init_imu_calibration{false};
