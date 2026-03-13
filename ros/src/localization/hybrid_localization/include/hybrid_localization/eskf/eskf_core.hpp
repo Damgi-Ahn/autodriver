@@ -7,6 +7,8 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include "hybrid_localization/types.hpp"
+
 namespace hybrid_localization
 {
 
@@ -130,6 +132,19 @@ public:
   const Eigen::Vector3d & b_g() const {return m_b_g;}
   const Eigen::Vector3d & b_a() const {return m_b_a;}
   const P15 & P() const {return m_P;}
+
+  // FGO 앵커 보정용 상태 직접 주입 (EskfCorrector 에서 사용)
+  // 오차 상태 δx는 0으로 리셋되고, 명목 상태만 교체된다.
+  void set_nominal_state(const NominalState & state)
+  {
+    m_p_map = state.p_map;
+    m_v_map = state.v_map;
+    m_q_map_from_base = state.q_map_from_base.normalized();
+    m_b_g = state.b_g;
+    m_b_a = state.b_a;
+    // 오차 상태는 암묵적으로 0이므로 P는 그대로 유지
+    // (FGO 가 P를 갱신하는 Stage 5에서 확장 예정)
+  }
 
 private:
   enum class RInflateChannel

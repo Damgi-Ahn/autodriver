@@ -59,9 +59,11 @@ target_include_directories(fgo_core PUBLIC
 )
 target_link_libraries(fgo_core Eigen3::Eigen gtsam)
 
-# --- FGO 백엔드 라이브러리 (Stage 3: GTSAM ISAM2 슬라이딩 윈도우) ---
+# --- FGO 백엔드 라이브러리 (Stage 3+4: GTSAM ISAM2 + EskfCorrector) ---
 ament_auto_add_library(fgo_backend SHARED
   src/fgo/fgo_backend.cpp
+  src/fgo/imu_buffer.cpp
+  src/fgo/eskf_corrector.cpp
 )
 target_include_directories(fgo_backend PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -121,6 +123,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_fgo_backend test/test_fgo_backend.cpp)
   target_link_libraries(test_fgo_backend fgo_backend fgo_core Eigen3::Eigen gtsam)
+
+  ament_add_gtest(test_eskf_corrector test/test_eskf_corrector.cpp)
+  target_link_libraries(test_eskf_corrector fgo_backend fgo_core eskf_core Eigen3::Eigen gtsam)
 endif()
 
 ament_auto_package()

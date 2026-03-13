@@ -219,19 +219,24 @@ void HybridLocalizationNode::maybe_push_keyframe(
 
   m_keyframe_buffer.push(kf);
 
-  // FGO Stage 3: 새 키프레임으로 그래프 업데이트
+  // FGO Stage 3+4: 그래프 업데이트 + ESKF 앵커 보정
   if (m_fgo_backend.is_initialized()) {
     const auto result = m_fgo_backend.update(kf, m_latest_fgo_gnss_);
     m_latest_fgo_gnss_.reset();  // 사용 후 소비
 
     if (result.valid) {
+      // Stage 4: FGO 결과를 ESKF 명목 상태에 반영 + keyframe 이후 IMU 재적분
+      const int n_reint = m_eskf_corrector_.apply(
+        m_eskf, result, kf.stamp.seconds(), m_imu_buffer_);
+
       RCLCPP_DEBUG(
         this->get_logger(),
-        "FGO update: kf=%lu  p=(%.2f, %.2f, %.2f)",
+        "FGO correction: kf=%lu  p_fgo=(%.2f, %.2f, %.2f)  reint=%d",
         result.keyframe_index,
         result.state.p_map.x(),
         result.state.p_map.y(),
-        result.state.p_map.z());
+        result.state.p_map.z(),
+        n_reint);
     }
   }
 

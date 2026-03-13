@@ -32,7 +32,9 @@
 #include "hybrid_localization/eskf/eskf_core.hpp"
 #include "hybrid_localization/eskf/gnss_update_handler.hpp"
 #include "hybrid_localization/eskf/odom_builder.hpp"
+#include "hybrid_localization/fgo/eskf_corrector.hpp"
 #include "hybrid_localization/fgo/fgo_backend.hpp"
+#include "hybrid_localization/fgo/imu_buffer.hpp"
 #include "hybrid_localization/fgo/imu_preintegration.hpp"
 #include "hybrid_localization/fgo/keyframe_buffer.hpp"
 #include "hybrid_localization/parameters.hpp"
@@ -258,6 +260,11 @@ private:
 
   // 최신 FGO 용 GNSS 측정값 (m_state_mutex 보호)
   std::optional<GnssMeasurement> m_latest_fgo_gnss_;
+
+  // ---- FGO Stage 4: EskfCorrector + ImuBuffer ----------------------------
+  // ImuBuffer: cb_imu 에서 push, maybe_push_keyframe 에서 read (m_state_mutex 보호)
+  ImuBuffer m_imu_buffer_;
+  EskfCorrector m_eskf_corrector_;
 
   // 키프레임 생성 후 내부 헬퍼
   void maybe_push_keyframe(

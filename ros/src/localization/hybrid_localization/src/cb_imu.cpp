@@ -94,6 +94,16 @@ void HybridLocalizationNode::imu_callback(
             dt);
         }
 
+        // FGO Stage 4: EskfCorrector 재적분을 위해 전처리 IMU 버퍼에 저장
+        // gyro_radps: propagate() 에 전달된 전처리 각속도 (base 프레임, LPF 완료)
+        // accel_mps2: zero-accel 모드의 b_a (재적분 시 eskf.b_a() 사용이므로 참조용)
+        ImuMeasurement imu_buf_meas;
+        imu_buf_meas.stamp_sec = current_stamp.seconds();
+        imu_buf_meas.gyro_radps = omega;
+        imu_buf_meas.accel_mps2 = accel;
+        imu_buf_meas.dt = dt;
+        m_imu_buffer_.push(imu_buf_meas);
+
         // 키프레임 생성 여부 확인
         NominalState cur_state;
         cur_state.p_map = m_eskf.p_map();
