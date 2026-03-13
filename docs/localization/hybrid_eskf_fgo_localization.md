@@ -16,7 +16,7 @@
 
 | 한계 | 원인 | 영향 |
 |------|------|------|
-| 지연 측정치(delayed measurement) 처리 불가 | 재귀 필터 특성상 과거 시점 보정 불가 | LiDAR scan matching 결과 활용 불가 |
+| 지연 측정치(delayed measurement) 처리 불가 | 재귀 필터 특성상 과거 시점 보정 불가 | 지연 센서 결과 활용 불가 |
 | 비가우시안 노이즈 취약 | EKF는 가우시안 가정 | GNSS 멀티패스, outlier 누적 |
 | 루프 클로저 반영 불가 | 필터는 단방향 시간 진행 | 동일 장소 재방문 시 오차 누적 |
 | 슬라이딩 윈도우 최적화 미지원 | 단일 공분산 행렬 전파 | 과거 측정치 재가중 불가 |
@@ -26,8 +26,8 @@
 FGO는 **슬라이딩 윈도우** 방식으로 최근 N초 구간의 상태를 **일괄 비선형 최적화**로 재추정한다.
 
 - 지연 측정치: 윈도우 내 어느 시점에도 팩터 추가 가능
-- 루프 클로저: pose 간 제약으로 표현
 - 견고한 outlier 제거: Huber / Cauchy robust kernel 적용
+- 루프 클로저: 향후 pose 간 제약 팩터로 확장 가능
 
 ### 1.3 하이브리드 구조의 이점
 
@@ -61,12 +61,12 @@ ESKF가 고빈도 실시간 출력을 담당하고, FGO가 정제된 pose를 사
 │  ┌──────────────────────▼──────────────────────┐  │
 │  │  FGO Backend   (10 Hz, 슬라이딩 윈도우)     │  │
 │  │                                             │  │
-│  │  GTSAM / g2o Factor Graph                   │  │
+│  │  GTSAM Factor Graph                         │  │
 │  │  ├── IMUPreintegration factor               │  │
 │  │  ├── GNSSPositionFactor                     │  │
 │  │  ├── GNSSVelocityFactor                     │  │
 │  │  ├── HeadingFactor                          │  │
-│  │  ├── LidarOdometryFactor (delayed OK)       │  │
+│  │  ├── NHCFactor                              │  │
 │  │  └── PriorFactor (marginalization anchor)   │  │
 │  │       │                                     │  │
 │  │       ├── publish /localization/fgo_odom    │  │
@@ -87,7 +87,6 @@ Vehicle (50Hz)┘         │ KeyframeBuffer::push(stamp, state, imu_preint)
                [FGO Backend::optimize()]
                         │
                         ├── GNSS factors (delayed OK)
-                        ├── LiDAR factors (latency ~200ms OK)
                         └── ESKFCorrector::apply(refined_pose)
                                    │
                                    ▼
@@ -139,7 +138,6 @@ FGO 그래프의 각 노드(키프레임)는 아래를 포함한다.
 | GNSS 방위 | `/sensing/gnss/heading` | `skyautonet_msgs/Gphdt` | 10 Hz |
 | 차량 속도 | `/vehicle/status/velocity_status` | `autoware_vehicle_msgs/VelocityReport` | 50 Hz |
 | 차량 조향 | `/vehicle/status/steering_status` | `autoware_vehicle_msgs/SteeringReport` | 50 Hz |
-| LiDAR Odom | `/localization/lidar_odom` | `nav_msgs/Odometry` | 10 Hz (지연 ~200ms) |
 
 ### 4.2 FGO 팩터 정의
 
@@ -186,20 +184,7 @@ noise    = σ²_yaw (파라미터)
 
 최대 변화율 게이팅: `|Δyaw/Δt| < 1.0 rad/s`.
 
-#### (e) LiDAR 오도메트리 팩터 (LidarOdometryFactor)
-
-KISS-ICP 또는 NDT 스캔 매칭 결과를 상대 pose 제약으로 추가.
-지연 허용: 수신 시점의 타임스탬프로 윈도우 내 노드에 삽입.
-
-```
-residual = T_i^{-1} * T_j - ΔT_lidar
-noise    = Σ_lidar (스캔 매칭 공분산)
-robust   = Cauchy(k=1.0)
-```
-
-활성화 조건: GNSS status `≤ 1` 또는 `use_lidar_factor: true` 설정.
-
-#### (f) 비홀로노믹 제약 팩터 (NHCFactor)
+#### (e) 비홀로노믹 제약 팩터 (NHCFactor)
 
 차량 side/vertical 속도 ≈ 0 제약.
 
@@ -208,7 +193,7 @@ residual = [v_base.y, v_base.z]
 noise    = diag(0.05, 0.1)² [m/s]
 ```
 
-#### (g) 마지널라이제이션 prior (MarginalizationFactor)
+#### (f) 마지널라이제이션 prior (MarginalizationFactor)
 
 슬라이딩 윈도우에서 탈락하는 가장 오래된 키프레임을 Schur complement로 주변화하여 prior로 고정.
 
@@ -235,7 +220,7 @@ noise    = diag(0.05, 0.1)² [m/s]
 ### 5.3 최적화 실행 주기
 
 - 기본: **10 Hz** (100ms 주기 타이머)
-- 최적화 라이브러리: **GTSAM 4.x** (권장) 또는 g2o
+- 최적화 라이브러리: **GTSAM 4.x**
 - 솔버: Levenberg-Marquardt (최대 iteration 5)
 
 ---
@@ -325,60 +310,66 @@ Phase 3 — 정상 운용
 ## 8. ROS 2 패키지 구조
 
 ```
-ros/src/localization/
-└── hybrid_localization/
-    ├── package.xml
-    ├── CMakeLists.txt
-    ├── config/
-    │   └── hybrid_localization.param.yaml
-    ├── launch/
-    │   └── hybrid_localization.launch.xml
-    ├── include/
-    │   └── hybrid_localization/
-    │       ├── hybrid_localization_node.hpp   # ROS2 노드
-    │       ├── eskf/
-    │       │   ├── eskf_core.hpp              # (eskf_localization에서 이식)
-    │       │   ├── eskf_corrector.hpp         # FGO→ESKF 교정
-    │       │   └── ...
-    │       ├── fgo/
-    │       │   ├── fgo_backend.hpp            # 슬라이딩 윈도우 최적화
-    │       │   ├── keyframe_buffer.hpp        # ESKF→FGO 버퍼
-    │       │   ├── factors/
-    │       │   │   ├── imu_preintegration_factor.hpp
-    │       │   │   ├── gnss_position_factor.hpp
-    │       │   │   ├── gnss_velocity_factor.hpp
-    │       │   │   ├── heading_factor.hpp
-    │       │   │   ├── lidar_odom_factor.hpp
-    │       │   │   └── nhc_factor.hpp
-    │       │   └── marginalization.hpp
-    │       ├── preprocess/                    # (eskf_localization에서 이식)
-    │       │   ├── imu_preprocessor.hpp
-    │       │   ├── gnss_preprocessor.hpp
-    │       │   └── gnss_heading_arbitrator.hpp
-    │       └── util/
-    │           ├── map_projector.hpp
-    │           ├── tf_cache.hpp
-    │           └── time_processing.hpp
-    ├── src/
-    │   ├── main.cpp
-    │   ├── hybrid_localization_node.cpp
-    │   ├── eskf/
-    │   │   ├── eskf_core.cpp
-    │   │   └── eskf_corrector.cpp
-    │   ├── fgo/
-    │   │   ├── fgo_backend.cpp
-    │   │   ├── keyframe_buffer.cpp
-    │   │   ├── factors/
-    │   │   │   ├── imu_preintegration_factor.cpp
-    │   │   │   └── ...
-    │   │   └── marginalization.cpp
-    │   ├── preprocess/
-    │   └── util/
-    └── test/
-        ├── test_eskf_core.cpp
-        ├── test_imu_preintegration.cpp
-        ├── test_fgo_backend.cpp
-        └── test_eskf_corrector.cpp
+ros/src/
+├── common/
+│   └── skyautonet_msgs/          ← Stage 0에서 신규 생성
+│       ├── package.xml
+│       ├── CMakeLists.txt
+│       └── msg/
+│           └── Gphdt.msg
+└── localization/
+    └── hybrid_localization/
+        ├── package.xml
+        ├── CMakeLists.txt
+        ├── config/
+        │   └── hybrid_localization.param.yaml
+        ├── launch/
+        │   └── hybrid_localization.launch.xml
+        ├── include/
+        │   └── hybrid_localization/
+        │       ├── hybrid_localization_node.hpp
+        │       ├── eskf/
+        │       │   ├── eskf_core.hpp
+        │       │   ├── eskf_corrector.hpp
+        │       │   └── ...
+        │       ├── fgo/
+        │       │   ├── fgo_backend.hpp
+        │       │   ├── keyframe_buffer.hpp
+        │       │   └── factors/
+        │       │       ├── imu_preintegration_factor.hpp
+        │       │       ├── gnss_position_factor.hpp
+        │       │       ├── gnss_velocity_factor.hpp
+        │       │       ├── heading_factor.hpp
+        │       │       ├── nhc_factor.hpp
+        │       │       └── marginalization.hpp
+        │       ├── preprocess/
+        │       │   ├── imu_preprocessor.hpp
+        │       │   ├── gnss_preprocessor.hpp
+        │       │   └── gnss_heading_arbitrator.hpp
+        │       └── util/
+        │           ├── map_projector.hpp
+        │           ├── tf_cache.hpp
+        │           └── time_processing.hpp
+        ├── src/
+        │   ├── main.cpp
+        │   ├── hybrid_localization_node.cpp
+        │   ├── eskf/
+        │   │   ├── eskf_core.cpp
+        │   │   └── eskf_corrector.cpp
+        │   ├── fgo/
+        │   │   ├── fgo_backend.cpp
+        │   │   ├── keyframe_buffer.cpp
+        │   │   ├── factors/
+        │   │   │   ├── imu_preintegration_factor.cpp
+        │   │   │   └── ...
+        │   │   └── marginalization.cpp
+        │   ├── preprocess/
+        │   └── util/
+        └── test/
+            ├── test_eskf_core.cpp
+            ├── test_imu_preintegration.cpp
+            ├── test_fgo_backend.cpp
+            └── test_eskf_corrector.cpp
 ```
 
 ---
@@ -395,7 +386,6 @@ ros/src/localization/
 | `/sensing/gnss/heading` | `skyautonet_msgs/Gphdt` | 방위 팩터 |
 | `/vehicle/status/velocity_status` | `autoware_vehicle_msgs/VelocityReport` | NHC/ZUPT |
 | `/vehicle/status/steering_status` | `autoware_vehicle_msgs/SteeringReport` | 요레이트 제약 |
-| `/localization/lidar_odom` | `nav_msgs/Odometry` | LiDAR 오도메트리 팩터 |
 | `/map/map_projector_info` | `tier4_map_msgs/MapProjectorInfo` | 좌표 투영 |
 | `/initialpose3d` | `geometry_msgs/PoseWithCovarianceStamped` | 외부 초기화 |
 
@@ -418,7 +408,6 @@ hybrid_localization:
   frame_id: "map"
   base_frame_id: "base_link"
   imu_frame_id: "imu_link"
-  ipc_socket_path: "/tmp/autodriver/localization.sock"
 
   # ESKF (eskf_localization 파라미터 계승)
   eskf:
@@ -465,11 +454,6 @@ hybrid_localization:
         enable: true
       heading:
         enable: true
-      lidar_odom:
-        enable: true
-        robust_kernel: "cauchy"
-        robust_k: 1.0
-        max_delay_sec: 0.5
       nhc:
         enable: true
     marginalization:
@@ -496,41 +480,77 @@ hybrid_localization:
 
 ### 11.2 ROS 2 패키지
 
-| 패키지 | 역할 |
-|--------|------|
-| `rclcpp` | ROS 2 C++ 클라이언트 |
-| `sensor_msgs`, `nav_msgs`, `geometry_msgs` | 표준 메시지 |
-| `autoware_vehicle_msgs` | 차량 상태 메시지 |
-| `tier4_map_msgs` | 지도 투영 메시지 |
-| `tf2_ros` | 좌표 변환 |
-| `diagnostic_msgs` | 진단 |
-| `autodriver_cmake` | 빌드 인프라 (CUDA, TRT finder) |
+| 패키지 | 출처 | 역할 |
+|--------|------|------|
+| `rclcpp` | ROS 2 기본 | ROS 2 C++ 클라이언트 |
+| `sensor_msgs`, `nav_msgs`, `geometry_msgs` | ROS 2 기본 | 표준 메시지 |
+| `diagnostic_msgs`, `visualization_msgs` | ROS 2 기본 | 진단·시각화 |
+| `tf2_ros`, `tf2_geometry_msgs` | ROS 2 기본 | 좌표 변환 |
+| `skyautonet_msgs` | **이 repo (신규 생성)** | `Gphdt` 방위 메시지 |
+| `autoware_vehicle_msgs` | Autoware Universe | 차량 상태 메시지 |
+| `tier4_map_msgs` | Autoware Universe | 지도 투영 메시지 |
+| `autodriver_cmake` | 이 repo | 빌드 인프라 |
 
 ---
 
-## 12. 개발 단계 계획
+## 12. 신규 생성 메시지 패키지
+
+### 12.1 skyautonet_msgs
+
+`autoware_vehicle_msgs`, `tier4_map_msgs`는 Autoware Universe에서 rosdep으로 공급되지만,
+`skyautonet_msgs`는 외부에 공개된 패키지가 없으므로 이 repo 안에 직접 생성한다.
+
+**위치:** `ros/src/common/skyautonet_msgs/`
+
+**패키지 구성:**
+```
+skyautonet_msgs/
+├── package.xml
+├── CMakeLists.txt
+└── msg/
+    └── Gphdt.msg
+```
+
+**`msg/Gphdt.msg` 필드 정의:**
+
+```
+# GNSS 방위각 메시지 (GPHDT NMEA sentence 기반)
+# heading: 도(degree) 단위, CW+ from East (비표준)
+#   → ENU yaw로 변환: yaw_rad = -heading_deg * π/180
+# status: GNSS 수신 상태 (sensor_msgs/NavSatStatus 와 동일 규약)
+#   -1: no fix  0: RTK Fixed  1: RTK Float / SBAS
+
+std_msgs/Header header
+float64 heading                    # [deg] CW+ from East
+sensor_msgs/NavSatStatus status
+```
+
+**의존 메시지:** `std_msgs/Header`, `sensor_msgs/NavSatStatus` (모두 ROS 2 기본)
+
+---
+
+## 13. 개발 단계 계획
 
 | 단계 | 내용 | 산출물 |
 |------|------|--------|
+| **Stage 0** | 메시지 패키지 생성: `skyautonet_msgs` (`Gphdt.msg`) | `ros/src/common/skyautonet_msgs/` |
 | **Stage 1** | ESKF 이식: eskf_localization → hybrid_localization | `eskf_core.cpp`, `hybrid_localization_node.cpp` (ESKF only) |
 | **Stage 2** | KeyframeBuffer + ImuPreintegration 구현 | `keyframe_buffer.cpp`, `imu_preintegration_factor.cpp` |
 | **Stage 3** | FGO 백엔드 구현 (GNSS 팩터만) | `fgo_backend.cpp`, GNSS 팩터, 마지널라이제이션 |
 | **Stage 4** | ESKFCorrector 구현 + 통합 테스트 | `eskf_corrector.cpp`, 단위 테스트 |
-| **Stage 5** | LiDAR 오도메트리 팩터 + 견고 커널 | `lidar_odom_factor.cpp` |
-| **Stage 6** | 파라미터 튜닝, 진단, 시각화 | 파라미터 yaml, 진단 publisher |
+| **Stage 5** | 파라미터 튜닝, 진단, 시각화 | 파라미터 yaml, 진단 publisher |
 
 ---
 
-## 13. 기존 ESKF와의 차이점 요약
+## 14. 기존 ESKF와의 차이점 요약
 
 | 항목 | eskf_localization | hybrid_localization |
 |------|-------------------|---------------------|
 | 추정 방식 | 재귀 EKF | EKF 프론트엔드 + FGO 백엔드 |
 | 지연 측정치 | 불가 | 슬라이딩 윈도우 내 가능 |
-| LiDAR 활용 | 미구현 (TODO) | LidarOdometryFactor |
 | outlier 제거 | NIS gate (soft) | Robust kernel (Huber/Cauchy) |
 | 루프 클로저 | 불가 | PoseBetweenFactor 추가 가능 |
 | 공분산 전파 | 단일 P 행렬 | 윈도우 내 전 상태 공분산 |
 | 실시간 출력 | O (200 Hz) | O (200 Hz, ESKF) |
 | 정제 출력 | — | O (10 Hz, FGO) |
-| 의존성 추가 | 없음 | GTSAM |
+| 의존성 추가 | 없음 | GTSAM, skyautonet_msgs |
