@@ -1,0 +1,19 @@
+<launch>
+  <arg name="window_sec" default="10.0"/>
+  <arg name="expected_output_rate_hz" default="50.0"/>
+  <arg name="csv_output_dir" default=""/>
+  <arg name="diagnostics_topic" default="/diagnostics"/>
+  <arg name="output_odom_topic" default="/localization/kinematic_state"/>
+
+  <node pkg="hybrid_localization_evaluation_tool"
+        exec="hybrid_localization_evaluation_tool"
+        name="hybrid_localization_evaluation_tool"
+        output="screen">
+    <param name="window_sec" value="$(var window_sec)"/>
+    <param name="expected_output_rate_hz" value="$(var expected_output_rate_hz)"/>
+    <param name="csv_output_dir" value="$(var csv_output_dir)"/>
+
+    <remap from="/diagnostics" to="$(var diagnostics_topic)"/>
+    <remap from="/localization/kinematic_state" to="$(var output_odom_topic)"/>
+  </node>
+</launch>

@@ -123,6 +123,12 @@ KpiSnapshot KpiEngine::ComputeSnapshot(const rclcpp::Time& now)
     snapshot.output_availability.last_age_sec =
         (now - output_stamps_.back()).seconds();
   }
+  if (window_sec_ > 0.0) {
+    snapshot.diag_rate_hz =
+        static_cast<double>(samples_.size()) / window_sec_;
+    snapshot.output_rate_hz =
+        static_cast<double>(output_stamps_.size()) / window_sec_;
+  }
 
   return snapshot;
 }

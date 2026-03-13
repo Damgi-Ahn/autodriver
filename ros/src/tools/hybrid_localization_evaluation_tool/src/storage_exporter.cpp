@@ -79,6 +79,7 @@ void StorageExporter::WriteKpiHeader()
   kpi_file_
       << "stamp_sec,window_sec,"
       << "output_count,output_expected,output_ratio,output_last_age_sec,"
+      << "diag_rate_hz,output_rate_hz,"
       << "pos_applied_ratio,pos_applied_count,pos_total,"
       << "vel_applied_ratio,vel_applied_count,vel_total,"
       << "heading_applied_ratio,heading_applied_count,heading_total,"
@@ -139,6 +140,7 @@ void StorageExporter::WriteKpiSnapshot(const KpiSnapshot& snapshot)
   } else {
     kpi_file_ << ",";
   }
+  kpi_file_ << snapshot.diag_rate_hz << "," << snapshot.output_rate_hz << ",";
 
   kpi_file_ << snapshot.gnss_pos_update.ratio << ","
             << snapshot.gnss_pos_update.applied << ","

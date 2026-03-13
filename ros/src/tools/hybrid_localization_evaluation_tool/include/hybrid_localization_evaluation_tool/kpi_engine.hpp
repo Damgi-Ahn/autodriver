@@ -40,6 +40,8 @@ struct KpiSnapshot {
   UpdateRateSummary heading_yaw_update;
 
   OutputAvailability output_availability;
+  double diag_rate_hz = 0.0;
+  double output_rate_hz = 0.0;
 
   StatSummary gnss_pos_nis;
   StatSummary gnss_vel_nis;

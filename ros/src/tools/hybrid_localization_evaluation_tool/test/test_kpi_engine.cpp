@@ -37,6 +37,9 @@ TEST(KpiEngineTest, ComputesUpdateRateAndOutputAvailability)
   EXPECT_EQ(snapshot.output_availability.output_count, 2u);
   EXPECT_NEAR(snapshot.output_availability.expected_count, 50.0, 1e-6);
   EXPECT_NEAR(snapshot.output_availability.ratio, 0.04, 1e-6);
+
+  EXPECT_NEAR(snapshot.diag_rate_hz, 0.2, 1e-6);
+  EXPECT_NEAR(snapshot.output_rate_hz, 0.2, 1e-6);
 }
 
 }  // namespace autodriver::tools

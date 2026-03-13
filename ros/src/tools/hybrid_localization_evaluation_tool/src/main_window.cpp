@@ -9,6 +9,11 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
+#include <sys/resource.h>
+#include <unistd.h>
+
+#include <algorithm>
+
 namespace autodriver::tools {
 
 namespace {
@@ -31,7 +36,9 @@ QFrame* BuildDivider()
   return line;
 }
 
-QFrame* BuildCard(const QString& title, const QString& body)
+QLabel* BuildMetricLabel(const QString& text);
+
+QFrame* BuildCard(const QString& title, QLabel** out_body_label)
 {
   auto* frame = new QFrame();
   frame->setObjectName("Card");
@@ -41,11 +48,12 @@ QFrame* BuildCard(const QString& title, const QString& body)
   auto* layout = new QVBoxLayout(frame);
   auto* title_label = new QLabel(title);
   title_label->setObjectName("CardTitle");
-  auto* body_label = BuildMetricLabel(body);
+  auto* body_label = BuildMetricLabel("n/a");
   body_label->setObjectName("CardBody");
   layout->addWidget(title_label);
   layout->addWidget(body_label);
   frame->setLayout(layout);
+  if (out_body_label) *out_body_label = body_label;
   return frame;
 }
 
@@ -82,6 +90,25 @@ QLabel* BuildMetricLabel(const QString& text)
 QString FormatRatio(double ratio)
 {
   return QString::number(ratio * 100.0, 'f', 1) + "%";
+}
+
+QString FormatCardStat(const StatSummary& stat)
+{
+  if (stat.count == 0) return "n/a";
+  return QString("mean %1 | p95 %2")
+      .arg(stat.mean, 0, 'f', 2)
+      .arg(stat.p95, 0, 'f', 2);
+}
+
+double ReadProcessCpuSeconds()
+{
+  struct rusage usage {};
+  if (getrusage(RUSAGE_SELF, &usage) != 0) return 0.0;
+  const double user = static_cast<double>(usage.ru_utime.tv_sec) +
+                      static_cast<double>(usage.ru_utime.tv_usec) / 1e6;
+  const double sys = static_cast<double>(usage.ru_stime.tv_sec) +
+                     static_cast<double>(usage.ru_stime.tv_usec) / 1e6;
+  return user + sys;
 }
 
 QString JoinReasons(const std::map<std::string, size_t>& reasons)
@@ -219,9 +246,9 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   center_layout->setSpacing(12);
   auto* stat_row = new QHBoxLayout();
   stat_row->setSpacing(12);
-  stat_row->addWidget(BuildCard("GNSS POS NIS", "n/a"));
-  stat_row->addWidget(BuildCard("GNSS VEL NIS", "n/a"));
-  stat_row->addWidget(BuildCard("HEADING NIS", "n/a"));
+  stat_row->addWidget(BuildCard("GNSS POS NIS", &nis_pos_card_));
+  stat_row->addWidget(BuildCard("GNSS VEL NIS", &nis_vel_card_));
+  stat_row->addWidget(BuildCard("HEADING NIS", &nis_heading_card_));
   center_layout->addLayout(stat_row);
   center_layout->addWidget(BuildChartPlaceholder("NIS Trend"));
   center_layout->addWidget(BuildChartPlaceholder("Delay Trend"));
@@ -231,13 +258,13 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   bottom_bar->setObjectName("Card");
   auto* bottom_layout = new QHBoxLayout(bottom_bar);
   bottom_layout->setContentsMargins(12, 8, 12, 8);
-  auto* hz_label = BuildMetricLabel("Diagnostics: n/a Hz | Output: n/a Hz");
-  hz_label->setObjectName("MetricLabel");
-  auto* cpu_label = BuildMetricLabel("Node CPU: n/a %");
-  cpu_label->setObjectName("MetricLabel");
-  bottom_layout->addWidget(hz_label);
+  hz_label_ = BuildMetricLabel("Diagnostics: n/a Hz | Output: n/a Hz");
+  hz_label_->setObjectName("MetricLabel");
+  cpu_label_ = BuildMetricLabel("Eval node CPU: n/a %");
+  cpu_label_->setObjectName("MetricLabel");
+  bottom_layout->addWidget(hz_label_);
   bottom_layout->addStretch(1);
-  bottom_layout->addWidget(cpu_label);
+  bottom_layout->addWidget(cpu_label_);
 
   layout->addWidget(left_panel, 0, 0);
   layout->addWidget(center_panel, 0, 1);
@@ -253,6 +280,11 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   timer_ = new QTimer(this);
   connect(timer_, &QTimer::timeout, this, [this]() { UpdateUi(); });
   timer_->start(200);
+
+  cpu_timer_.start();
+  last_cpu_seconds_ = ReadProcessCpuSeconds();
+  cpu_cores_ = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
+  if (cpu_cores_ <= 0) cpu_cores_ = 1;
 }
 
 QString EvaluationMainWindow::FormatStat(const StatSummary& stat, const QString& unit)
@@ -327,6 +359,31 @@ void EvaluationMainWindow::UpdateUi()
                               .arg(FormatStat(kpi.gnss_vel_delay, " s"))
                               .arg(FormatStat(kpi.velocity_delay, " s"))
                               .arg(FormatStat(kpi.steering_delay, " s")));
+
+    if (nis_pos_card_) nis_pos_card_->setText(FormatCardStat(kpi.gnss_pos_nis));
+    if (nis_vel_card_) nis_vel_card_->setText(FormatCardStat(kpi.gnss_vel_nis));
+    if (nis_heading_card_) {
+      nis_heading_card_->setText(FormatCardStat(kpi.heading_yaw_nis));
+    }
+    if (hz_label_) {
+      hz_label_->setText(QString("Diagnostics: %1 Hz | Output: %2 Hz")
+                             .arg(kpi.diag_rate_hz, 0, 'f', 1)
+                             .arg(kpi.output_rate_hz, 0, 'f', 1));
+    }
+  }
+
+  if (cpu_label_) {
+    const double wall_sec = cpu_timer_.elapsed() / 1000.0;
+    const double cpu_now = ReadProcessCpuSeconds();
+    const double cpu_delta = cpu_now - last_cpu_seconds_;
+    const double wall_delta = wall_sec;
+    if (wall_delta > 0.0) {
+      const double pct = (cpu_delta / (wall_delta * cpu_cores_)) * 100.0;
+      cpu_label_->setText(QString("Eval node CPU: %1 %")
+                              .arg(std::max(0.0, pct), 0, 'f', 1));
+    }
+    cpu_timer_.restart();
+    last_cpu_seconds_ = cpu_now;
   }
 }
 

@@ -52,6 +52,7 @@ target_link_libraries(hybrid_localization_evaluation_tool PRIVATE
 # ---------------------------------------------------------------------------
 install(TARGETS hybrid_localization_evaluation_tool DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY launch/  DESTINATION share/${PROJECT_NAME}/launch)
 
 # ---------------------------------------------------------------------------
 # Tests
