@@ -97,14 +97,6 @@ void HybridLocalizationNode::initialpose_callback(
     last_heading_yaw_update_dbg_ = EskfYawUpdateDebug{};
   }
 
-  // If KISS-ICP tight coupling is enabled, force it to re-initialize from the new ESKF pose.
-    kiss_initialized_ = false;
-    have_kiss_yaw_ref_ = false;
-    std::scoped_lock<std::mutex> diag_lock(kiss_diag_mutex_);
-    kiss_diag_.initialized = false;
-    kiss_diag_.skip_reason = "external_reinit";
-  }
-
   RCLCPP_INFO(
     this->get_logger(),
     "ESKF initialized from external initialpose (frame=%s, p=[%.3f, %.3f, %.3f])",

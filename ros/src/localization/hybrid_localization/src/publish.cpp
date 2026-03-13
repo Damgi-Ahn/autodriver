@@ -142,10 +142,6 @@ void HybridLocalizationNode::publish_timer_callback()
     diag_input.imu_accel_bias_noise_std =
       node_params_.eskf.accel_bias_noise_std;
 
-    {
-      diag_input.has_kiss = true;
-    }
-
     const auto latest_gnss = latest_gnss_;
     if (latest_gnss) {
       diag_input.has_gnss_status = true;

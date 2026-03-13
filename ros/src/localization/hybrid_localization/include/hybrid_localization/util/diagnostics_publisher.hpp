@@ -93,32 +93,6 @@ struct EskfDiagnosticsInput
   bool has_steering_delay{false};
   double steering_delay_sec{0.0};
 
-  bool has_kiss{false};
-  bool kiss_enabled{false};
-  bool kiss_initialized{false};
-  bool kiss_yaw_enabled{false};
-  bool kiss_vy_enabled{false};
-  int kiss_source_points{0};
-  double kiss_dt_ms{0.0};
-  double kiss_trust{0.0};
-  double kiss_target_trust{0.0};
-  double kiss_yaw_rate_radps{0.0};
-  double kiss_vy_mps{0.0};
-  double kiss_yaw_var_eff{0.0};
-  double kiss_vy_var_eff{0.0};
-  bool kiss_yaw_applied{false};
-  std::string kiss_yaw_reason{};
-  double kiss_yaw_nis{0.0};
-  double kiss_yaw_R{0.0};
-  bool kiss_vy_applied{false};
-  std::string kiss_vy_reason{};
-  double kiss_vy_nis{0.0};
-  double kiss_vy_R{0.0};
-  std::string kiss_skip_reason{};
-  double kiss_time_alignment_error_ms{0.0};
-  bool kiss_reset_candidate{false};
-  size_t kiss_reset_count{0};
-
   // FGO Stage 5 진단
   bool has_fgo_stats{false};
   size_t fgo_keyframe_count{0};   // 총 키프레임 수
