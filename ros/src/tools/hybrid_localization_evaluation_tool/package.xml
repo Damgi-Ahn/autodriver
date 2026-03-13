@@ -14,9 +14,12 @@
   <depend>rclcpp</depend>
   <depend>diagnostic_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
 
   <build_depend>qt6-base-dev</build_depend>
+  <build_depend>qt6-charts-dev</build_depend>
   <exec_depend>qt6-base-dev</exec_depend>
+  <exec_depend>qt6-charts-dev</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

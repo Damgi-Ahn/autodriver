@@ -12,6 +12,8 @@ namespace autodriver::tools {
 struct DiagSample {
   rclcpp::Time stamp;
 
+  std::unordered_map<std::string, std::string> raw_kv;
+
   bool is_activated = false;
   bool eskf_initialized = false;
 

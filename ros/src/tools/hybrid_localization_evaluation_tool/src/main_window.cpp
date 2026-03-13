@@ -9,6 +9,11 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
+#include <QtCharts/QChart>
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QValueAxis>
+
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -57,26 +62,43 @@ QFrame* BuildCard(const QString& title, QLabel** out_body_label)
   return frame;
 }
 
-QFrame* BuildChartPlaceholder(const QString& title)
+QChartView* BuildChart(const QString& title,
+                       const std::vector<QLineSeries*>& series)
 {
-  auto* frame = new QFrame();
-  frame->setObjectName("Chart");
-  frame->setFrameShape(QFrame::StyledPanel);
-  frame->setFrameShadow(QFrame::Sunken);
+  auto* chart = new QChart();
+  chart->setTitle(title);
+  chart->legend()->setVisible(true);
+  chart->setBackgroundBrush(QColor("#10151c"));
+  chart->setTitleBrush(QBrush(QColor("#a3b1c6")));
+  chart->setTitleFont(QFont("Noto Sans", 11, QFont::DemiBold));
 
-  auto* layout = new QVBoxLayout(frame);
-  auto* title_label = new QLabel(title);
-  title_label->setObjectName("ChartTitle");
-  auto* hint = new QLabel("Plot placeholder");
-  hint->setObjectName("ChartHint");
-  hint->setAlignment(Qt::AlignCenter);
-  layout->addWidget(title_label);
-  layout->addStretch(1);
-  layout->addWidget(hint);
-  layout->addStretch(2);
-  frame->setLayout(layout);
-  frame->setMinimumHeight(180);
-  return frame;
+  for (auto* s : series) {
+    chart->addSeries(s);
+  }
+
+  auto* axis_x = new QValueAxis();
+  axis_x->setTitleText("t (s)");
+  axis_x->setLabelFormat("%.0f");
+  axis_x->setLabelsColor(QColor("#8a93a3"));
+  axis_x->setTitleBrush(QBrush(QColor("#8a93a3")));
+
+  auto* axis_y = new QValueAxis();
+  axis_y->setLabelFormat("%.2f");
+  axis_y->setLabelsColor(QColor("#8a93a3"));
+  axis_y->setTitleBrush(QBrush(QColor("#8a93a3")));
+
+  chart->addAxis(axis_x, Qt::AlignBottom);
+  chart->addAxis(axis_y, Qt::AlignLeft);
+  for (auto* s : series) {
+    s->attachAxis(axis_x);
+    s->attachAxis(axis_y);
+  }
+
+  auto* view = new QChartView(chart);
+  view->setObjectName("Chart");
+  view->setRenderHint(QPainter::Antialiasing, true);
+  view->setMinimumHeight(200);
+  return view;
 }
 
 QLabel* BuildMetricLabel(const QString& text)
@@ -109,6 +131,59 @@ double ReadProcessCpuSeconds()
   const double sys = static_cast<double>(usage.ru_stime.tv_sec) +
                      static_cast<double>(usage.ru_stime.tv_usec) / 1e6;
   return user + sys;
+}
+
+QString FormatPoseLabel(const PoseSnapshot& pose)
+{
+  if (!pose.has_pose) return "n/a";
+  const double yaw_deg = pose.yaw_rad * 180.0 / M_PI;
+  return QString("x %1\ny %2\nz %3\nyaw %4 deg")
+      .arg(pose.x, 0, 'f', 3)
+      .arg(pose.y, 0, 'f', 3)
+      .arg(pose.z, 0, 'f', 3)
+      .arg(yaw_deg, 0, 'f', 2);
+}
+
+QString FormatDiagDump(const DiagSample& sample)
+{
+  std::vector<std::pair<QString, QString>> items;
+  items.reserve(sample.raw_kv.size());
+  for (const auto& kv : sample.raw_kv) {
+    items.emplace_back(QString::fromStdString(kv.first),
+                       QString::fromStdString(kv.second));
+  }
+  std::sort(items.begin(), items.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+  QStringList lines;
+  lines << QString("stamp: %1").arg(sample.stamp.seconds(), 0, 'f', 3);
+  for (const auto& item : items) {
+    lines << item.first + ": " + item.second;
+  }
+  return lines.join("\n");
+}
+
+void AppendPoint(QLineSeries* series,
+                 double x,
+                 double y,
+                 int max_points)
+{
+  if (!series) return;
+  QList<QPointF> points = series->points();
+  points.append(QPointF(x, y));
+  while (points.size() > max_points) {
+    points.pop_front();
+  }
+  series->replace(points);
+}
+
+void UpdateAxisRange(QChartView* view, double x_min, double x_max)
+{
+  if (!view || !view->chart()) return;
+  for (auto* axis : view->chart()->axes(Qt::Horizontal)) {
+    auto* value_axis = qobject_cast<QValueAxis*>(axis);
+    if (value_axis) value_axis->setRange(x_min, x_max);
+  }
 }
 
 QString JoinReasons(const std::map<std::string, size_t>& reasons)
@@ -167,6 +242,14 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
       "  font-size: 12px;"
       "  color: #c9d1d9;"
       "}"
+      "QPlainTextEdit#DiagDump {"
+      "  background-color: #0f141a;"
+      "  border: 1px solid #232b36;"
+      "  border-radius: 8px;"
+      "  color: #c7d0da;"
+      "  font-family: \"JetBrains Mono\";"
+      "  font-size: 11px;"
+      "}"
       "QFrame#Card {"
       "  background-color: #141a22;"
       "  border: 1px solid #232b36;"
@@ -198,6 +281,11 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
       "  color: #556171;"
       "  font-size: 11px;"
       "}"
+      "QChartView#Chart {"
+      "  background-color: #10151c;"
+      "  border: 1px dashed #2d3643;"
+      "  border-radius: 12px;"
+      "}"
       "QFrame {"
       "  background-color: #1f2630;"
       "}"
@@ -222,6 +310,9 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   delay_label_->setObjectName("MetricLabel");
   reason_label_ = BuildMetricLabel("-");
   reason_label_->setObjectName("MetricLabel");
+  diag_dump_ = new QPlainTextEdit();
+  diag_dump_->setObjectName("DiagDump");
+  diag_dump_->setReadOnly(true);
 
   status_label_->setWordWrap(true);
 
@@ -237,6 +328,7 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   auto* left_layout = new QVBoxLayout(left_panel);
   left_layout->setSpacing(12);
   left_layout->addWidget(BuildGroup("Current Localization", status_content));
+  left_layout->addWidget(BuildGroup("Diagnostics Snapshot", diag_dump_));
   left_layout->addWidget(BuildGroup("Update Rates", kpi_label_));
   left_layout->addWidget(BuildGroup("Reasons", reason_label_));
   left_layout->addStretch(1);
@@ -244,14 +336,58 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
   auto* center_panel = new QWidget();
   auto* center_layout = new QVBoxLayout(center_panel);
   center_layout->setSpacing(12);
-  auto* stat_row = new QHBoxLayout();
-  stat_row->setSpacing(12);
-  stat_row->addWidget(BuildCard("GNSS POS NIS", &nis_pos_card_));
-  stat_row->addWidget(BuildCard("GNSS VEL NIS", &nis_vel_card_));
-  stat_row->addWidget(BuildCard("HEADING NIS", &nis_heading_card_));
-  center_layout->addLayout(stat_row);
-  center_layout->addWidget(BuildChartPlaceholder("NIS Trend"));
-  center_layout->addWidget(BuildChartPlaceholder("Delay Trend"));
+
+  auto* pose_row = new QHBoxLayout();
+  pose_row->setSpacing(12);
+  pose_row->addWidget(BuildCard("GNSS POSE", &gnss_pose_card_));
+  pose_row->addWidget(BuildCard("ESKF POSE", &eskf_pose_card_));
+  pose_row->addWidget(BuildCard("FGO POSE", &fgo_pose_card_));
+  center_layout->addLayout(pose_row);
+
+  auto* nis_row = new QHBoxLayout();
+  nis_row->setSpacing(12);
+  nis_row->addWidget(BuildCard("GNSS POS NIS", &nis_pos_card_));
+  nis_row->addWidget(BuildCard("GNSS VEL NIS", &nis_vel_card_));
+  nis_row->addWidget(BuildCard("HEADING NIS", &nis_heading_card_));
+  center_layout->addLayout(nis_row);
+
+  nis_pos_series_ = new QLineSeries();
+  nis_pos_series_->setName("pos");
+  nis_vel_series_ = new QLineSeries();
+  nis_vel_series_->setName("vel");
+  nis_heading_series_ = new QLineSeries();
+  nis_heading_series_->setName("heading");
+  nis_pos_chart_view_ = BuildChart("NIS Pos", {nis_pos_series_});
+  nis_vel_chart_view_ = BuildChart("NIS Vel", {nis_vel_series_});
+  nis_heading_chart_view_ = BuildChart("NIS Heading", {nis_heading_series_});
+
+  delay_gnss_series_ = new QLineSeries();
+  delay_gnss_series_->setName("gnss");
+  delay_gnss_vel_series_ = new QLineSeries();
+  delay_gnss_vel_series_->setName("gnss_vel");
+  delay_vehicle_series_ = new QLineSeries();
+  delay_vehicle_series_->setName("vehicle_vel");
+  delay_steer_series_ = new QLineSeries();
+  delay_steer_series_->setName("steering");
+  delay_gnss_chart_view_ = BuildChart("Delay GNSS", {delay_gnss_series_});
+  delay_gnss_vel_chart_view_ = BuildChart("Delay GNSS Vel", {delay_gnss_vel_series_});
+  delay_vehicle_chart_view_ = BuildChart("Delay Vehicle Vel", {delay_vehicle_series_});
+  delay_steer_chart_view_ = BuildChart("Delay Steering", {delay_steer_series_});
+
+  auto* plot_grid = new QGridLayout();
+  plot_grid->setHorizontalSpacing(12);
+  plot_grid->setVerticalSpacing(12);
+  plot_grid->addWidget(nis_pos_chart_view_, 0, 0);
+  plot_grid->addWidget(nis_vel_chart_view_, 0, 1);
+  plot_grid->addWidget(nis_heading_chart_view_, 0, 2);
+  plot_grid->addWidget(delay_gnss_chart_view_, 1, 0);
+  plot_grid->addWidget(delay_gnss_vel_chart_view_, 1, 1);
+  plot_grid->addWidget(delay_vehicle_chart_view_, 1, 2);
+  plot_grid->addWidget(delay_steer_chart_view_, 2, 0, 1, 2);
+
+  auto* plot_container = new QWidget();
+  plot_container->setLayout(plot_grid);
+  center_layout->addWidget(plot_container);
   center_layout->addWidget(BuildGroup("Delay Summary", delay_label_));
 
   auto* bottom_bar = new QFrame();
@@ -317,6 +453,8 @@ void EvaluationMainWindow::UpdateUi()
 {
   if (!bridge_) return;
 
+  static constexpr int kMaxChartPoints = 300;
+
   DiagSample sample;
   if (bridge_->GetLatestSample(&sample)) {
     status_label_->setText(QString("activated: %1 | eskf: %2")
@@ -324,10 +462,26 @@ void EvaluationMainWindow::UpdateUi()
                                .arg(sample.eskf_initialized ? "true" : "false"));
     timestamp_label_->setText(QString("stamp: %1 s")
                                   .arg(sample.stamp.seconds(), 0, 'f', 3));
+    if (diag_dump_) diag_dump_->setPlainText(FormatDiagDump(sample));
+  }
+
+  PoseSnapshot pose;
+  if (gnss_pose_card_ && bridge_->GetLatestGnssPose(&pose)) {
+    gnss_pose_card_->setText(FormatPoseLabel(pose));
+  }
+  if (eskf_pose_card_ && bridge_->GetLatestEskfPose(&pose)) {
+    eskf_pose_card_->setText(FormatPoseLabel(pose));
+  }
+  if (fgo_pose_card_ && bridge_->GetLatestFgoPose(&pose)) {
+    fgo_pose_card_->setText(FormatPoseLabel(pose));
   }
 
   KpiSnapshot kpi;
   if (bridge_->GetLatestKpi(&kpi)) {
+    const double x = (kpi.stamp.nanoseconds() > 0)
+                         ? kpi.stamp.seconds()
+                         : (kpi.diag_rate_hz > 0.0 ? kpi.diag_rate_hz : 0.0);
+
     const QString output_ratio =
         (kpi.output_availability.expected_count > 0.0)
             ? QString::number(kpi.output_availability.ratio * 100.0, 'f', 1) + "%"
@@ -370,6 +524,24 @@ void EvaluationMainWindow::UpdateUi()
                              .arg(kpi.diag_rate_hz, 0, 'f', 1)
                              .arg(kpi.output_rate_hz, 0, 'f', 1));
     }
+
+    AppendPoint(nis_pos_series_, x, kpi.gnss_pos_nis.mean, kMaxChartPoints);
+    AppendPoint(nis_vel_series_, x, kpi.gnss_vel_nis.mean, kMaxChartPoints);
+    AppendPoint(nis_heading_series_, x, kpi.heading_yaw_nis.mean, kMaxChartPoints);
+
+    AppendPoint(delay_gnss_series_, x, kpi.gnss_delay.mean, kMaxChartPoints);
+    AppendPoint(delay_gnss_vel_series_, x, kpi.gnss_vel_delay.mean, kMaxChartPoints);
+    AppendPoint(delay_vehicle_series_, x, kpi.velocity_delay.mean, kMaxChartPoints);
+    AppendPoint(delay_steer_series_, x, kpi.steering_delay.mean, kMaxChartPoints);
+
+    const double x_min = x - 60.0;
+    UpdateAxisRange(nis_pos_chart_view_, x_min, x);
+    UpdateAxisRange(nis_vel_chart_view_, x_min, x);
+    UpdateAxisRange(nis_heading_chart_view_, x_min, x);
+    UpdateAxisRange(delay_gnss_chart_view_, x_min, x);
+    UpdateAxisRange(delay_gnss_vel_chart_view_, x_min, x);
+    UpdateAxisRange(delay_vehicle_chart_view_, x_min, x);
+    UpdateAxisRange(delay_steer_chart_view_, x_min, x);
   }
 
   if (cpu_label_) {

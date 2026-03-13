@@ -3,7 +3,7 @@ project(hybrid_localization_evaluation_tool VERSION 0.1.0 LANGUAGES CXX)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(autodriver_cmake REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Charts)
 
 include(AutodriverCompilerOptions)
 ament_auto_find_build_dependencies()  # Finds: rclcpp, diagnostic_msgs
@@ -28,12 +28,14 @@ target_include_directories(hybrid_localization_evaluation_tool_lib PUBLIC
 
 target_link_libraries(hybrid_localization_evaluation_tool_lib PUBLIC
   Qt6::Widgets
+  Qt6::Charts
 )
 
 ament_target_dependencies(hybrid_localization_evaluation_tool_lib PUBLIC
   rclcpp
   diagnostic_msgs
   nav_msgs
+  geometry_msgs
 )
 
 # ---------------------------------------------------------------------------

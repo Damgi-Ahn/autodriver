@@ -44,6 +44,7 @@ bool DiagnosticParser::Parse(
   sample.stamp = rclcpp::Time(msg.header.stamp);
 
   const auto kv = BuildMap(*target);
+  sample.raw_kv = kv;
 
   auto it = kv.find("is_activated");
   if (it != kv.end()) ParseBool(it->second, &sample.is_activated);

@@ -8,6 +8,10 @@
 #include <QMainWindow>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <QPlainTextEdit>
+
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
 
 #include <memory>
 
@@ -37,6 +41,25 @@ class EvaluationMainWindow : public QMainWindow {
   QLabel* nis_heading_card_ = nullptr;
   QLabel* hz_label_ = nullptr;
   QLabel* cpu_label_ = nullptr;
+  QPlainTextEdit* diag_dump_ = nullptr;
+  QLabel* gnss_pose_card_ = nullptr;
+  QLabel* eskf_pose_card_ = nullptr;
+  QLabel* fgo_pose_card_ = nullptr;
+
+  QLineSeries* nis_pos_series_ = nullptr;
+  QLineSeries* nis_vel_series_ = nullptr;
+  QLineSeries* nis_heading_series_ = nullptr;
+  QLineSeries* delay_gnss_series_ = nullptr;
+  QLineSeries* delay_gnss_vel_series_ = nullptr;
+  QLineSeries* delay_vehicle_series_ = nullptr;
+  QLineSeries* delay_steer_series_ = nullptr;
+  QChartView* nis_pos_chart_view_ = nullptr;
+  QChartView* nis_vel_chart_view_ = nullptr;
+  QChartView* nis_heading_chart_view_ = nullptr;
+  QChartView* delay_gnss_chart_view_ = nullptr;
+  QChartView* delay_gnss_vel_chart_view_ = nullptr;
+  QChartView* delay_vehicle_chart_view_ = nullptr;
+  QChartView* delay_steer_chart_view_ = nullptr;
 
   QTimer* timer_ = nullptr;
   QElapsedTimer cpu_timer_;
