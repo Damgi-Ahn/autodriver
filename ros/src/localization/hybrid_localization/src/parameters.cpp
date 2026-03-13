@@ -35,6 +35,8 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     time_alignment_tolerance_sec = 0.0;
   }
 
+  heading.enable_yaw_update =
+    node.declare_parameter("heading.enable_yaw_update", heading.enable_yaw_update);
   heading.yaw_var = node.declare_parameter("heading.yaw_var", heading.yaw_var);
   heading.max_rate_radps = node.declare_parameter(
     "heading.max_rate_radps",
