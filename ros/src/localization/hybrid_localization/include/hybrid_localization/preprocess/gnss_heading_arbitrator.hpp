@@ -47,13 +47,13 @@ class GnssHeadingArbitrator
 public:
   explicit GnssHeadingArbitrator(
     const GnssHeadingArbitratorParams & t_params = GnssHeadingArbitratorParams{})
-  : m_params(t_params) {}
+  : params_(t_params) {}
 
   void set_params(const GnssHeadingArbitratorParams & t_params)
   {
-    m_params = t_params;
+    params_ = t_params;
   }
-  const GnssHeadingArbitratorParams & params() const {return m_params;}
+  const GnssHeadingArbitratorParams & params() const {return params_;}
 
   void reset();
 
@@ -78,16 +78,16 @@ private:
 
   bool is_fresh(double t_now_sec, double t_stamp_sec) const;
 
-  GnssHeadingArbitratorParams m_params{};
+  GnssHeadingArbitratorParams params_{};
 
-  int m_latest_gnss_status{std::numeric_limits<int>::min()};
-  double m_latest_gnss_status_stamp_sec{std::numeric_limits<double>::quiet_NaN()};
-  double m_gphdt_holdoff_until_sec{0.0};
+  int latest_gnss_status_{std::numeric_limits<int>::min()};
+  double latest_gnss_status_stamp_sec_{std::numeric_limits<double>::quiet_NaN()};
+  double gphdt_holdoff_until_sec_{0.0};
 
-  bool m_have_gphdt{false};
-  double m_gphdt_yaw_rad{std::numeric_limits<double>::quiet_NaN()};
-  double m_gphdt_yaw_var_rad2{std::numeric_limits<double>::quiet_NaN()};
-  double m_gphdt_stamp_sec{std::numeric_limits<double>::quiet_NaN()};
+  bool have_gphdt_{false};
+  double gphdt_yaw_rad_{std::numeric_limits<double>::quiet_NaN()};
+  double gphdt_yaw_var_rad2_{std::numeric_limits<double>::quiet_NaN()};
+  double gphdt_stamp_sec_{std::numeric_limits<double>::quiet_NaN()};
 
 };
 

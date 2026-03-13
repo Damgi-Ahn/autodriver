@@ -26,25 +26,25 @@ public:
   // Initialize with cutoff frequency (Hz)
   // tau = 1 / (2π * cutoff_freq)
   explicit EmaFilterVector3(double t_cutoff_freq_hz)
-  : m_tau(1.0 / (2.0 * M_PI * t_cutoff_freq_hz)) {}
+  : tau_(1.0 / (2.0 * M_PI * t_cutoff_freq_hz)) {}
 
   // Set cutoff frequency (Hz)
   void set_cutoff_freq(double t_cutoff_freq_hz)
   {
-    m_tau = 1.0 / (2.0 * M_PI * t_cutoff_freq_hz);
+    tau_ = 1.0 / (2.0 * M_PI * t_cutoff_freq_hz);
   }
 
   // Get time constant (seconds)
-  double tau() const {return m_tau;}
+  double tau() const {return tau_;}
 
   // Reset filter state
-  void reset() {m_initialized = false;}
+  void reset() {initialized_ = false;}
 
   // Check if filter is initialized
-  bool initialized() const {return m_initialized;}
+  bool initialized() const {return initialized_;}
 
   // Get current filtered value
-  const geometry_msgs::msg::Vector3 & value() const {return m_value;}
+  const geometry_msgs::msg::Vector3 & value() const {return value_;}
 
   // Apply filter with variable dt
   // Returns filtered value
@@ -52,10 +52,10 @@ public:
     const geometry_msgs::msg::Vector3 & t_input,
     double t_dt)
   {
-    if (!m_initialized) {
-      m_value = t_input;
-      m_initialized = true;
-      return m_value;
+    if (!initialized_) {
+      value_ = t_input;
+      initialized_ = true;
+      return value_;
     }
 
     // Clamp dt to avoid numerical issues
@@ -64,20 +64,20 @@ public:
     // Compute alpha: α = dt / (τ + dt)
     // As dt → 0, α → 0 (more smoothing)
     // As dt → ∞, α → 1 (less smoothing)
-    const double alpha = dt / (m_tau + dt);
+    const double alpha = dt / (tau_ + dt);
 
     // EMA: y = α * x + (1 - α) * y_prev
-    m_value.x = alpha * t_input.x + (1.0 - alpha) * m_value.x;
-    m_value.y = alpha * t_input.y + (1.0 - alpha) * m_value.y;
-    m_value.z = alpha * t_input.z + (1.0 - alpha) * m_value.z;
+    value_.x = alpha * t_input.x + (1.0 - alpha) * value_.x;
+    value_.y = alpha * t_input.y + (1.0 - alpha) * value_.y;
+    value_.z = alpha * t_input.z + (1.0 - alpha) * value_.z;
 
-    return m_value;
+    return value_;
   }
 
 private:
-  double m_tau{0.01};                    // Time constant (seconds), default ~15.9 Hz
-  bool m_initialized{false};
-  geometry_msgs::msg::Vector3 m_value{}; // Current filtered value
+  double tau_{0.01};                    // Time constant (seconds), default ~15.9 Hz
+  bool initialized_{false};
+  geometry_msgs::msg::Vector3 value_{}; // Current filtered value
 };
 
 // EMA filter for scalar values
@@ -87,40 +87,40 @@ public:
   EmaFilterScalar() = default;
 
   explicit EmaFilterScalar(double t_cutoff_freq_hz)
-  : m_tau(1.0 / (2.0 * M_PI * t_cutoff_freq_hz)) {}
+  : tau_(1.0 / (2.0 * M_PI * t_cutoff_freq_hz)) {}
 
   void set_cutoff_freq(double t_cutoff_freq_hz)
   {
-    m_tau = 1.0 / (2.0 * M_PI * t_cutoff_freq_hz);
+    tau_ = 1.0 / (2.0 * M_PI * t_cutoff_freq_hz);
   }
 
-  double tau() const {return m_tau;}
+  double tau() const {return tau_;}
 
-  void reset() {m_initialized = false;}
+  void reset() {initialized_ = false;}
 
-  bool initialized() const {return m_initialized;}
+  bool initialized() const {return initialized_;}
 
-  double value() const {return m_value;}
+  double value() const {return value_;}
 
   double update(double t_input, double t_dt)
   {
-    if (!m_initialized) {
-      m_value = t_input;
-      m_initialized = true;
-      return m_value;
+    if (!initialized_) {
+      value_ = t_input;
+      initialized_ = true;
+      return value_;
     }
 
     const double dt = std::clamp(t_dt, 1e-6, 1.0);
-    const double alpha = dt / (m_tau + dt);
-    m_value = alpha * t_input + (1.0 - alpha) * m_value;
+    const double alpha = dt / (tau_ + dt);
+    value_ = alpha * t_input + (1.0 - alpha) * value_;
 
-    return m_value;
+    return value_;
   }
 
 private:
-  double m_tau{0.01};
-  bool m_initialized{false};
-  double m_value{0.0};
+  double tau_{0.01};
+  bool initialized_{false};
+  double value_{0.0};
 };
 
 // Quaternion utilities for orientation processing

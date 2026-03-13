@@ -105,7 +105,7 @@ public:
   void set_params(const ImuPreprocessParams & t_params);
 
   // Get current parameters
-  const ImuPreprocessParams & params() const {return m_params;}
+  const ImuPreprocessParams & params() const {return params_;}
 
   // Calibration: collect samples for averaging
   void add_calibration_sample(const sensor_msgs::msg::Imu & msg);
@@ -124,26 +124,26 @@ public:
     ImuPreprocessResult & out);
 
   // Get calibration data (for inspection)
-  const ImuCalibrationData & calibration() const {return m_calibration;}
+  const ImuCalibrationData & calibration() const {return calibration_;}
 
   // Get number of collected samples (during calibration)
-  size_t sample_count() const {return m_gyro_samples.size();}
+  size_t sample_count() const {return gyro_samples_.size();}
 
   // Reset LPF filters
   void reset_filters();
 
 private:
-  ImuPreprocessParams m_params;
-  ImuCalibrationData m_calibration;
+  ImuPreprocessParams params_;
+  ImuCalibrationData calibration_;
 
   // EMA Low-pass filters
-  EmaFilterVector3 m_gyro_lpf;
-  EmaFilterVector3 m_accel_lpf;
+  EmaFilterVector3 gyro_lpf_;
+  EmaFilterVector3 accel_lpf_;
 
   // Temporary buffers for calibration
-  std::vector<geometry_msgs::msg::Vector3> m_gyro_samples;
-  std::vector<geometry_msgs::msg::Vector3> m_accel_samples;
-  std::vector<geometry_msgs::msg::Quaternion> m_orientation_samples;
+  std::vector<geometry_msgs::msg::Vector3> gyro_samples_;
+  std::vector<geometry_msgs::msg::Vector3> accel_samples_;
+  std::vector<geometry_msgs::msg::Quaternion> orientation_samples_;
 
 
   // ---- Pipeline steps -------------------------------------------------------

@@ -223,57 +223,15 @@ diagnostic_msgs::msg::DiagnosticArray EskfDiagnosticsPublisher::build(
       std::to_string(input.steering_delay_sec * 1000.0) + " ms");
   }
 
-  if (input.has_kiss) {
-    add_key_value(status, "kiss_enabled", input.kiss_enabled ? "true" : "false");
+
+  // FGO Stage 5 진단
+  if (input.has_fgo_stats) {
     add_key_value(
-      status, "kiss_initialized",
-      input.kiss_initialized ? "true" : "false");
+      status, "fgo_keyframe_count",
+      std::to_string(input.fgo_keyframe_count));
     add_key_value(
-      status, "kiss_yaw_enabled",
-      input.kiss_yaw_enabled ? "true" : "false");
-    add_key_value(
-      status, "kiss_vy_enabled",
-      input.kiss_vy_enabled ? "true" : "false");
-    add_key_value(
-      status, "kiss_source_points",
-      std::to_string(input.kiss_source_points));
-    add_key_value(status, "kiss_dt_ms", std::to_string(input.kiss_dt_ms));
-    add_key_value(status, "kiss_trust", std::to_string(input.kiss_trust));
-    add_key_value(
-      status, "kiss_target_trust",
-      std::to_string(input.kiss_target_trust));
-    add_key_value(
-      status, "kiss_yaw_rate_radps",
-      std::to_string(input.kiss_yaw_rate_radps));
-    add_key_value(status, "kiss_vy_mps", std::to_string(input.kiss_vy_mps));
-    add_key_value(
-      status, "kiss_yaw_var_eff",
-      std::to_string(input.kiss_yaw_var_eff));
-    add_key_value(
-      status, "kiss_vy_var_eff",
-      std::to_string(input.kiss_vy_var_eff));
-    add_key_value(
-      status, "kiss_yaw_applied",
-      input.kiss_yaw_applied ? "true" : "false");
-    add_key_value(status, "kiss_yaw_reason", input.kiss_yaw_reason);
-    add_key_value(status, "kiss_yaw_nis", std::to_string(input.kiss_yaw_nis));
-    add_key_value(status, "kiss_yaw_R", std::to_string(input.kiss_yaw_R));
-    add_key_value(
-      status, "kiss_vy_applied",
-      input.kiss_vy_applied ? "true" : "false");
-    add_key_value(status, "kiss_vy_reason", input.kiss_vy_reason);
-    add_key_value(status, "kiss_vy_nis", std::to_string(input.kiss_vy_nis));
-    add_key_value(status, "kiss_vy_R", std::to_string(input.kiss_vy_R));
-    add_key_value(status, "kiss_skip_reason", input.kiss_skip_reason);
-    add_key_value(
-      status, "kiss_time_alignment_error_ms",
-      std::to_string(input.kiss_time_alignment_error_ms));
-    add_key_value(
-      status, "kiss_reset_candidate",
-      input.kiss_reset_candidate ? "true" : "false");
-    add_key_value(
-      status, "kiss_reset_count",
-      std::to_string(input.kiss_reset_count));
+      status, "fgo_correction_count",
+      std::to_string(input.fgo_correction_count));
   }
 
   diag_array.status.push_back(status);
