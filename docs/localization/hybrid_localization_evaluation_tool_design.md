@@ -111,6 +111,8 @@ ROS2 + C++17 + Qt6 기반 데스크톱 툴의 초기 설계를 정의한다.
    - delay 평균/최대/경보 횟수
 6. **출력 가용성**
    - `/localization/kinematic_state` publish-ready 구간 비율
+7. **수집 주파수 모니터링**
+   - `diag_rate_hz`, `output_rate_hz`
 
 ---
 
@@ -153,12 +155,16 @@ ROS2 + C++17 + Qt6 기반 데스크톱 툴의 초기 설계를 정의한다.
    - Key-Value를 typed struct로 매핑
 2. 핵심 KPI 4종 실시간 계산
    - 업데이트 적용률 / reason 분포 / NIS 요약 / 지연 요약
-3. Qt6 대시보드 3패널
-   - 상태등(활성/초기화)
-   - KPI 카드
-   - 최근 경보 로그
-4. CSV export
-   - 원시 진단 프레임 + 1초 집계 KPI
+3. 출력 가용성 KPI 계산
+   - `/localization/kinematic_state` 기반 publish ratio + last age
+4. Qt6 대시보드 전문가용 레이아웃
+   - 좌측: 현재 localization 상태 + 업데이트 적용률/이유
+   - 중앙: NIS 카드 + 플롯 영역 + 지연 요약
+   - 하단: 진단/출력 Hz + 툴 프로세스 CPU 사용량
+5. CSV export
+   - 원시 진단 프레임 + 1초 집계 KPI + rate/availability 컬럼
+6. 단위 테스트
+   - 진단 파서 / KPI 엔진 검증
 
 ---
 
@@ -169,3 +175,22 @@ ROS2 + C++17 + Qt6 기반 데스크톱 툴의 초기 설계를 정의한다.
 - 평가 기준 임계치(예: NIS, delay, P_trace) 운영팀 합의
 - rosbag 기반 오프라인 재생 모드 지원 요구사항
 
+---
+
+## 8) 현재 구현 상태 요약 (2026-03-13 기준)
+
+- 패키지 위치: `ros/src/tools/hybrid_localization_evaluation_tool`
+- 실행 방법: `ros2 launch hybrid_localization_evaluation_tool hybrid_localization_evaluation_tool.launch.xml`
+- 기본 파라미터:
+  - `window_sec=10.0`
+  - `expected_output_rate_hz=50.0`
+  - `csv_output_dir=""` (비활성)
+- KPI 출력 항목:
+  - 업데이트 적용률/이유 분포
+  - NIS 요약 (mean/p95/max/count)
+  - delay 요약 (mean/p95/max/count)
+  - 출력 가용성 (ratio, last age)
+  - diag/output rate (Hz)
+- UI 특징:
+  - 다크 테마, 전문가용 정보 밀도
+  - 좌측 상태/중앙 카드/플롯 영역/하단 Hz·CPU 표시
