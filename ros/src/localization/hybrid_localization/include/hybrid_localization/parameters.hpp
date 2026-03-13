@@ -216,47 +216,6 @@ struct LocalizationInitParams
   bool reset_on_external_pose{true};
 };
 
-{
-  // Master enable switch
-  bool enable{false};
-
-  // Input pointcloud (single topic for initial integration)
-  // Recommended default in this repo: /sensing/lidar/concatenated/pointcloud
-
-  // Optional debug TF publishing (map -> debug_child_frame using internal KISS pose)
-  bool publish_debug_tf{false};
-  std::string debug_child_frame{"base_link_icp"};
-
-  // KISS-ICP pipeline configuration (subset)
-
-  // Basic fusion toggles (Phase 2.0)
-
-  // Measurement variances (base values, will be inflated/deflated by trust ramp)
-  double yaw_var{0.05}; // rad^2
-
-  // Basic gates
-  int min_source_points{200}; // minimum points used for registration (proxy quality)
-  double max_abs_yaw_rate_radps{2.0};
-  double max_abs_vy_mps{5.0};
-
-  // Time alignment tolerance for ICP measurement application (seconds)
-  double time_alignment_tolerance_sec{0.15};
-
-  // Trust ramping by GNSS status (0..1, 1=trust ICP most)
-  // target_trust is selected from GNSS status and then low-pass filtered with tau.
-  double trust_tau_sec{1.0};
-  double trust_status_neg{1.0}; // status < 0
-  double trust_status_0{1.0};   // status == 0
-  double trust_status_1{0.5};   // status == 1
-  double trust_status_2{0.2};   // status >= 2
-
-  // Optional automatic hard reset (disabled by default)
-  bool enable_auto_reset{false};
-  double auto_reset_err_pos_m{5.0};
-  double auto_reset_err_yaw_rad{0.35}; // ~20deg
-  double auto_reset_hold_sec{2.0};
-};
-
 struct HybridLocalizationNodeParams
 {
   // 핵심 파라미터 묶음 (기존 타입 재사용)

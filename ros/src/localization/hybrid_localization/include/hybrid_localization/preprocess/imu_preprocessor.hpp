@@ -146,13 +146,51 @@ private:
   std::vector<geometry_msgs::msg::Quaternion> m_orientation_samples;
 
 
-  // Helper: transform Vector3 using TF (rotation only)
+  // ---- Pipeline steps -------------------------------------------------------
+  // preprocess() 가 순서대로 호출. 각 단계는 독립적으로 테스트 가능.
+
+  // Step 1: 입력 유한성 검증
+  static ImuPreprocessStatus validate_input(const sensor_msgs::msg::Imu & msg);
+
+  // Step 2: gyro/accel 바이어스 제거 (imu_link 프레임)
+  static void remove_bias(
+    const geometry_msgs::msg::Vector3 & raw_gyro,
+    const geometry_msgs::msg::Vector3 & raw_accel,
+    const ImuCalibrationData & cal,
+    geometry_msgs::msg::Vector3 & gyro_out,
+    geometry_msgs::msg::Vector3 & accel_out);
+
+  // Step 3: EMA LPF 적용
+  void apply_lpf(
+    const geometry_msgs::msg::Vector3 & gyro_debiased,
+    const geometry_msgs::msg::Vector3 & accel_debiased,
+    double dt,
+    geometry_msgs::msg::Vector3 & gyro_out,
+    geometry_msgs::msg::Vector3 & accel_out);
+
+  // Step 4: 중력 제거 및 자세 교정
+  void remove_gravity_and_calibrate_orientation(
+    const sensor_msgs::msg::Imu & msg,
+    const geometry_msgs::msg::Vector3 & accel_filtered,
+    geometry_msgs::msg::Vector3 & accel_out,
+    geometry_msgs::msg::Quaternion & q_calibrated_out) const;
+
+  // Step 5: base_link 프레임으로 좌표 변환
+  static void transform_to_base(
+    const geometry_msgs::msg::Vector3 & gyro_filtered,
+    const geometry_msgs::msg::Vector3 & accel_gravity_removed,
+    const geometry_msgs::msg::TransformStamped & tf_imu_to_base,
+    geometry_msgs::msg::Vector3 & gyro_base_out,
+    geometry_msgs::msg::Vector3 & accel_base_out);
+
+  // ---- Helpers --------------------------------------------------------------
+
+  // Vector3 회전 변환 (TF 이용, 회전만 적용)
   static geometry_msgs::msg::Vector3 transform_vector3(
     const geometry_msgs::msg::Vector3 & vec,
     const geometry_msgs::msg::TransformStamped & transform);
 
-  // Helper: compute orientation bias from measured gravity
-  // Assumes vehicle is stationary and level (or at known tilt)
+  // 중력 벡터로부터 IMU 자세 바이어스 추정
   geometry_msgs::msg::Quaternion compute_orientation_bias_from_gravity(
     const geometry_msgs::msg::Vector3 & measured_gravity) const;
 

@@ -35,7 +35,6 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     time_alignment_tolerance_sec = 0.0;
   }
 
-    node.declare_parameter(
   heading.yaw_var = node.declare_parameter("heading.yaw_var", heading.yaw_var);
   heading.max_rate_radps = node.declare_parameter(
     "heading.max_rate_radps",
@@ -109,7 +108,7 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
   std::string default_calibration_path;
   try {
     const std::string package_share =
-      ament_index_cpp::get_package_share_directory("eskf_localization");
+      ament_index_cpp::get_package_share_directory("hybrid_localization");
     default_calibration_path = package_share + "/config/imu_calibration.yaml";
   } catch (const std::exception &) {
     default_calibration_path = "config/imu_calibration.yaml";
@@ -216,20 +215,6 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     "init.external_initialpose_topic", init.external_initialpose_topic);
   init.reset_on_external_pose = node.declare_parameter(
     "init.reset_on_external_pose", init.reset_on_external_pose);
-
-  // KISS-ICP tight coupling (Phase 2)
-
-
-
-
-
-  const double icp_tol_ms =
-    node.declare_parameter(
-  if (std::isfinite(icp_tol_ms) && icp_tol_ms > 0.0) {
-  } else {
-  }
-
-
 
   eskf.init_pos_var =
     node.declare_parameter("eskf.init_pos_var", eskf.init_pos_var);

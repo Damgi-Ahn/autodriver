@@ -1,4 +1,4 @@
-#include "hybrid_localization/eskf_localization_node.hpp"
+#include "hybrid_localization/hybrid_localization_node.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -18,10 +18,17 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
   m_last_gnss_vel_stamp(0, 0, RCL_ROS_TIME),
   m_last_velocity_stamp(0, 0, RCL_ROS_TIME),
   m_last_steering_stamp(0, 0, RCL_ROS_TIME),
-  m_last_heading_stamp(0, 0, RCL_ROS_TIME),
-  m_last_pointcloud_stamp(0, 0, RCL_ROS_TIME)
+  m_last_heading_stamp(0, 0, RCL_ROS_TIME)
 {
-  RCLCPP_INFO(this->get_logger(), "Initializing ESKF Localization Node");
+  RCLCPP_INFO(this->get_logger(), "Initializing Hybrid Localization Node");
+
+  // CallbackGroup 생성 — 각 주파수 도메인을 독립 스레드에서 실행
+  m_imu_cb_group_ = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
+  m_sensor_cb_group_ = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
+  m_timer_cb_group_ = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
 
   load_parameters(); // 파라미터 로딩은 별도 로더에서 일괄 처리
 
@@ -61,59 +68,65 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
   m_tf_cache.cache_common_extrinsics(this->get_logger());
 
   // 센서 구독/퍼블리셔 설정은 노드 배선의 핵심
-  m_imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
-    io.imu_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::imu_callback, this,
-      std::placeholders::_1));
+  // IMU: 전용 고주파 그룹 (200Hz)
+  {
+    rclcpp::SubscriptionOptions imu_opts;
+    imu_opts.callback_group = m_imu_cb_group_;
+    m_imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
+      io.imu_topic, 1,
+      std::bind(&HybridLocalizationNode::imu_callback, this, std::placeholders::_1),
+      imu_opts);
+  }
 
-  m_gnss_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>(
-    io.gnss_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::gnss_callback, this,
-      std::placeholders::_1));
+  // 저주파 센서 구독: GNSS / Vehicle / Heading — 공유 센서 그룹
+  {
+    rclcpp::SubscriptionOptions sensor_opts;
+    sensor_opts.callback_group = m_sensor_cb_group_;
 
-  m_gnss_vel_sub =
-    this->create_subscription<geometry_msgs::msg::TwistStamped>(
-    io.gnss_vel_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::gnss_vel_callback, this,
-      std::placeholders::_1));
+    m_gnss_sub = this->create_subscription<sensor_msgs::msg::NavSatFix>(
+      io.gnss_topic, 1,
+      std::bind(&HybridLocalizationNode::gnss_callback, this, std::placeholders::_1),
+      sensor_opts);
 
-  m_map_projector_sub =
-    this->create_subscription<tier4_map_msgs::msg::MapProjectorInfo>(
-    io.map_projector_info_topic, rclcpp::QoS(1).transient_local(),
-    std::bind(
-      &HybridLocalizationNode::map_projector_info_callback, this,
-      std::placeholders::_1));
+    m_gnss_vel_sub = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+      io.gnss_vel_topic, 1,
+      std::bind(&HybridLocalizationNode::gnss_vel_callback, this, std::placeholders::_1),
+      sensor_opts);
 
-  m_velocity_sub =
-    this->create_subscription<autoware_vehicle_msgs::msg::VelocityReport>(
-    io.velocity_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::velocity_callback, this,
-      std::placeholders::_1));
+    m_map_projector_sub =
+      this->create_subscription<tier4_map_msgs::msg::MapProjectorInfo>(
+      io.map_projector_info_topic, rclcpp::QoS(1).transient_local(),
+      std::bind(
+        &HybridLocalizationNode::map_projector_info_callback, this,
+        std::placeholders::_1),
+      sensor_opts);
 
-  m_steering_sub =
-    this->create_subscription<autoware_vehicle_msgs::msg::SteeringReport>(
-    io.steering_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::steering_callback, this,
-      std::placeholders::_1));
+    m_velocity_sub =
+      this->create_subscription<autoware_vehicle_msgs::msg::VelocityReport>(
+      io.velocity_topic, 1,
+      std::bind(&HybridLocalizationNode::velocity_callback, this, std::placeholders::_1),
+      sensor_opts);
 
-  m_heading_sub = this->create_subscription<skyautonet_msgs::msg::Gphdt>(
-    io.heading_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::heading_callback, this,
-      std::placeholders::_1));
+    m_steering_sub =
+      this->create_subscription<autoware_vehicle_msgs::msg::SteeringReport>(
+      io.steering_topic, 1,
+      std::bind(&HybridLocalizationNode::steering_callback, this, std::placeholders::_1),
+      sensor_opts);
 
-  // Autoware-compatible initial pose input (typically remapped to /initialpose3d)
-  m_initialpose_sub =
-    this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
-    m_node_params.init.external_initialpose_topic, 1,
-    std::bind(
-      &HybridLocalizationNode::initialpose_callback, this,
-      std::placeholders::_1));
+    m_heading_sub = this->create_subscription<skyautonet_msgs::msg::Gphdt>(
+      io.heading_topic, 1,
+      std::bind(&HybridLocalizationNode::heading_callback, this, std::placeholders::_1),
+      sensor_opts);
+
+    // 외부 초기자세 입력 (/initialpose3d)
+    m_initialpose_sub =
+      this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+      m_node_params.init.external_initialpose_topic, 1,
+      std::bind(
+        &HybridLocalizationNode::initialpose_callback, this,
+        std::placeholders::_1),
+      sensor_opts);
+  }
 
   // Autoware-compatible trigger service (activate/deactivate)
   service_trigger_node_ = this->create_service<std_srvs::srv::SetBool>(
@@ -121,7 +134,8 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
     std::bind(
       &HybridLocalizationNode::service_trigger_node, this,
       std::placeholders::_1, std::placeholders::_2),
-    rclcpp::ServicesQoS().get_rmw_qos_profile());
+    rclcpp::ServicesQoS().get_rmw_qos_profile(),
+    m_sensor_cb_group_);
 
 
   // IMU 캘리브레이션 경로/시작 여부는 파라미터에 의해 결정
@@ -149,6 +163,18 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
         m_node_params.calibration_file_path.c_str());
     }
   }
+
+  // 발행 타이머 생성 — 타이머 전용 그룹에 할당
+  const double rate_hz = m_node_params.io.publish_rate;
+  const auto period = std::chrono::duration<double>(1.0 / rate_hz);
+  m_publish_timer = this->create_wall_timer(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(period),
+    std::bind(&HybridLocalizationNode::publish_timer_callback, this),
+    m_timer_cb_group_);
+
+  RCLCPP_INFO(
+    this->get_logger(), "Hybrid Localization Node ready (publish_rate=%.0f Hz, threads=3)",
+    rate_hz);
 }
 
 bool HybridLocalizationNode::validate_stamp_and_order(

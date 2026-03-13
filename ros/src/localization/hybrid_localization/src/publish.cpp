@@ -1,4 +1,4 @@
-#include "hybrid_localization/eskf_localization_node.hpp"
+#include "hybrid_localization/hybrid_localization_node.hpp"
 
 #include <algorithm>
 #include <cmath>

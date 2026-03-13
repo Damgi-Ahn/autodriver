@@ -326,20 +326,13 @@ bool ImuPreprocessor::load_calibration(
   return true;
 }
 
-ImuPreprocessStatus ImuPreprocessor::preprocess(
-  const sensor_msgs::msg::Imu & msg,
-  const geometry_msgs::msg::TransformStamped & tf_imu_to_base,
-  double dt,
-  ImuPreprocessResult & out)
+// ---------------------------------------------------------------------------
+// Pipeline step implementations
+// ---------------------------------------------------------------------------
+
+ImuPreprocessStatus ImuPreprocessor::validate_input(
+  const sensor_msgs::msg::Imu & msg)
 {
-  // 입력 유효성/보정/LPF/중력 제거/좌표 변환 순서로 처리
-  out = ImuPreprocessResult{};
-
-  if (!m_calibration.valid) {
-    return ImuPreprocessStatus::kNoCalibration;
-  }
-
-  // Check for finite values
   if (!std::isfinite(msg.angular_velocity.x) ||
     !std::isfinite(msg.angular_velocity.y) ||
     !std::isfinite(msg.angular_velocity.z) ||
@@ -349,164 +342,130 @@ ImuPreprocessStatus ImuPreprocessor::preprocess(
   {
     return ImuPreprocessStatus::kNonFiniteInput;
   }
+  return ImuPreprocessStatus::kOk;
+}
 
-  // Store raw values
+void ImuPreprocessor::remove_bias(
+  const geometry_msgs::msg::Vector3 & raw_gyro,
+  const geometry_msgs::msg::Vector3 & raw_accel,
+  const ImuCalibrationData & cal,
+  geometry_msgs::msg::Vector3 & gyro_out,
+  geometry_msgs::msg::Vector3 & accel_out)
+{
+  gyro_out.x = raw_gyro.x - cal.gyro_bias.x;
+  gyro_out.y = raw_gyro.y - cal.gyro_bias.y;
+  gyro_out.z = raw_gyro.z - cal.gyro_bias.z;
+
+  accel_out.x = raw_accel.x - cal.accel_bias.x;
+  accel_out.y = raw_accel.y - cal.accel_bias.y;
+  accel_out.z = raw_accel.z - cal.accel_bias.z;
+}
+
+void ImuPreprocessor::apply_lpf(
+  const geometry_msgs::msg::Vector3 & gyro_debiased,
+  const geometry_msgs::msg::Vector3 & accel_debiased,
+  double dt,
+  geometry_msgs::msg::Vector3 & gyro_out,
+  geometry_msgs::msg::Vector3 & accel_out)
+{
+  gyro_out = m_gyro_lpf.update(gyro_debiased, dt);
+  accel_out = m_accel_lpf.update(accel_debiased, dt);
+}
+
+void ImuPreprocessor::remove_gravity_and_calibrate_orientation(
+  const sensor_msgs::msg::Imu & msg,
+  const geometry_msgs::msg::Vector3 & accel_filtered,
+  geometry_msgs::msg::Vector3 & accel_out,
+  geometry_msgs::msg::Quaternion & q_calibrated_out) const
+{
+  accel_out = accel_filtered;
+  q_calibrated_out = quat_utils::identity();
+
+  if (!m_params.enable_gravity_removal) {
+    return;
+  }
+
+  if (!quat_utils::is_valid(msg.orientation)) {
+    // 유효한 자세가 없으면 수평 가정: Z 방향으로만 중력 제거
+    accel_out.z -= m_params.gravity_magnitude;
+    return;
+  }
+
+  // 자세 교정: q_calibrated = q_imu * q_bias_inv
+  auto q_imu = quat_utils::normalize(msg.orientation);
+  if (m_calibration.orientation_bias_valid && m_params.enable_orientation_calibration) {
+    auto q_bias_inv = quat_utils::conjugate(m_calibration.orientation_bias);
+    q_calibrated_out = quat_utils::normalize(quat_utils::multiply(q_imu, q_bias_inv));
+  } else {
+    q_calibrated_out = q_imu;
+  }
+
+  // 중력 제거: g_sensor = R^(-1) * [0, 0, g]_world
+  geometry_msgs::msg::Vector3 gravity_world{};
+  gravity_world.z = m_params.gravity_magnitude;  // ENU: +Z up
+  auto q_inv = quat_utils::conjugate(q_calibrated_out);
+  const auto gravity_sensor = quat_utils::rotate_vector(q_inv, gravity_world);
+
+  accel_out.x = accel_filtered.x - gravity_sensor.x;
+  accel_out.y = accel_filtered.y - gravity_sensor.y;
+  accel_out.z = accel_filtered.z - gravity_sensor.z;
+}
+
+void ImuPreprocessor::transform_to_base(
+  const geometry_msgs::msg::Vector3 & gyro_filtered,
+  const geometry_msgs::msg::Vector3 & accel_gravity_removed,
+  const geometry_msgs::msg::TransformStamped & tf_imu_to_base,
+  geometry_msgs::msg::Vector3 & gyro_base_out,
+  geometry_msgs::msg::Vector3 & accel_base_out)
+{
+  gyro_base_out = transform_vector3(gyro_filtered, tf_imu_to_base);
+  accel_base_out = transform_vector3(accel_gravity_removed, tf_imu_to_base);
+}
+
+// ---------------------------------------------------------------------------
+// Public preprocess() — pipeline steps를 순서대로 호출
+// ---------------------------------------------------------------------------
+ImuPreprocessStatus ImuPreprocessor::preprocess(
+  const sensor_msgs::msg::Imu & msg,
+  const geometry_msgs::msg::TransformStamped & tf_imu_to_base,
+  double dt,
+  ImuPreprocessResult & out)
+{
+  out = ImuPreprocessResult{};
+
+  if (!m_calibration.valid) {
+    return ImuPreprocessStatus::kNoCalibration;
+  }
+
+  // Step 1: 입력 검증
+  const auto step1_status = validate_input(msg);
+  if (step1_status != ImuPreprocessStatus::kOk) {
+    return step1_status;
+  }
   out.angular_velocity_raw = msg.angular_velocity;
   out.linear_acceleration_raw = msg.linear_acceleration;
 
-  // =====================================================================
-  // Step 1: Copy raw values for preprocessing pipeline
-  // =====================================================================
-  geometry_msgs::msg::Vector3 gyro_temp_corrected = msg.angular_velocity;
-  geometry_msgs::msg::Vector3 accel_temp_corrected = msg.linear_acceleration;
+  // Step 2: 바이어스 제거
+  geometry_msgs::msg::Vector3 gyro_debiased, accel_debiased;
+  remove_bias(
+    msg.angular_velocity, msg.linear_acceleration, m_calibration,
+    gyro_debiased, accel_debiased);
 
-  // =====================================================================
-  // Step 2: Remove bias in imu_link frame
-  // =====================================================================
-  geometry_msgs::msg::Vector3 gyro_corrected = gyro_temp_corrected;
-  gyro_corrected.x -= m_calibration.gyro_bias.x;
-  gyro_corrected.y -= m_calibration.gyro_bias.y;
-  gyro_corrected.z -= m_calibration.gyro_bias.z;
-
-  geometry_msgs::msg::Vector3 accel_corrected = accel_temp_corrected;
-  accel_corrected.x -= m_calibration.accel_bias.x;
-  accel_corrected.y -= m_calibration.accel_bias.y;
-  accel_corrected.z -= m_calibration.accel_bias.z;
-
-  // =====================================================================
-  // Step 3: Apply EMA Low-Pass Filter
-  // =====================================================================
-  const auto gyro_filtered = m_gyro_lpf.update(gyro_corrected, dt);
-  const auto accel_filtered = m_accel_lpf.update(accel_corrected, dt);
-
+  // Step 3: LPF 적용
+  geometry_msgs::msg::Vector3 gyro_filtered, accel_filtered;
+  apply_lpf(gyro_debiased, accel_debiased, dt, gyro_filtered, accel_filtered);
   out.angular_velocity_filtered = gyro_filtered;
   out.linear_acceleration_filtered = accel_filtered;
 
-  // =====================================================================
-  // Step 4: Process orientation and remove gravity
-  // =====================================================================
-  geometry_msgs::msg::Vector3 accel_gravity_removed = accel_filtered;
-  out.orientation_calibrated = quat_utils::identity();
+  // Step 4: 중력 제거 및 자세 교정
+  geometry_msgs::msg::Vector3 accel_no_gravity;
+  remove_gravity_and_calibrate_orientation(
+    msg, accel_filtered, accel_no_gravity, out.orientation_calibrated);
 
-  if (m_params.enable_gravity_removal && quat_utils::is_valid(msg.orientation)) {
-    // Get raw IMU orientation
-    auto q_imu = quat_utils::normalize(msg.orientation);
-
-    // Apply orientation calibration if valid
-    // q_calibrated = q_imu * q_bias_inv
-    // This aligns the IMU orientation to eskf_base_link frame
-    if (m_calibration.orientation_bias_valid &&
-      m_params.enable_orientation_calibration)
-    {
-      auto q_bias_inv = quat_utils::conjugate(m_calibration.orientation_bias);
-      out.orientation_calibrated = quat_utils::multiply(q_imu, q_bias_inv);
-      out.orientation_calibrated = quat_utils::normalize(out.orientation_calibrated);
-    } else {
-      out.orientation_calibrated = q_imu;
-    }
-
-    // Gravity removal using calibrated orientation
-    // In the world frame (ENU), gravity is [0, 0, -g]
-    // In the sensor frame, gravity = R^T * [0, 0, -g] = R^(-1) * [0, 0, -g]
-    // where R is the rotation from sensor to world
-    // The IMU measures acceleration = a_proper - g_sensor
-    // So: a_proper = a_measured + g_sensor
-    //
-    // To get linear acceleration (gravity-free), we compute:
-    // a_linear = a_measured - g_expected_in_sensor_frame
-    //
-    // g_expected_in_sensor_frame = R^T * [0, 0, g]
-    // where R = rotation(q_calibrated) (sensor to world)
-
-    geometry_msgs::msg::Vector3 gravity_world{};
-    gravity_world.x = 0.0;
-    gravity_world.y = 0.0;
-    gravity_world.z = m_params.gravity_magnitude; // +Z up in ENU
-
-    // Rotate gravity from world frame to sensor frame
-    // g_sensor = R^(-1) * g_world = conjugate(q) * g_world * q
-    auto q_inv = quat_utils::conjugate(out.orientation_calibrated);
-    auto gravity_sensor = quat_utils::rotate_vector(q_inv, gravity_world);
-
-    // Remove gravity from acceleration
-    accel_gravity_removed.x = accel_filtered.x - gravity_sensor.x;
-    accel_gravity_removed.y = accel_filtered.y - gravity_sensor.y;
-    accel_gravity_removed.z = accel_filtered.z - gravity_sensor.z;
-
-    out.gravity_removed = gravity_sensor;
-  } else if (!quat_utils::is_valid(msg.orientation) &&
-    m_params.enable_gravity_removal)
-  {
-    // If orientation is invalid but gravity removal is enabled,
-    // we still need to handle this case
-    // Use a simple assumption: sensor is roughly level
-    accel_gravity_removed.z -= m_params.gravity_magnitude;
-    out.gravity_removed.x = 0.0;
-    out.gravity_removed.y = 0.0;
-    out.gravity_removed.z = m_params.gravity_magnitude;
-  }
-
-  // =====================================================================
-  // Step 5: Transform to base_link frame
-  // =====================================================================
-  out.angular_velocity_base = transform_vector3(gyro_filtered, tf_imu_to_base);
-  out.linear_acceleration_base =
-    transform_vector3(accel_gravity_removed, tf_imu_to_base);
-
-#if 0
-  // ---------------------------------------------------------------------------
-  // (Optional) Lever-arm correction for IMU translation offset
-  //
-  // If the IMU is not located at base_link origin, the *specific force* at the
-  // IMU location differs from the specific force at base_link origin due to
-  // rigid-body kinematics:
-  //
-  //   a_base = a_imu - α×r - ω×(ω×r)
-  //
-  // where:
-  //   r : vector from base_link origin to IMU origin (expressed in base_link)
-  //   ω : angular velocity in base_link (rad/s)
-  //   α : angular acceleration in base_link (rad/s^2)
-  //
-  // Note:
-  // - This correction can amplify noise because it uses α (gyro derivative).
-  // - Enable only if you really need base_link-origin acceleration.
-  // ---------------------------------------------------------------------------
-
-  const tf2::Vector3 r_base(tf_imu_to_base.transform.translation.x,
-    tf_imu_to_base.transform.translation.y,
-    tf_imu_to_base.transform.translation.z);
-
-  const tf2::Vector3 omega_base(out.angular_velocity_base.x,
-    out.angular_velocity_base.y,
-    out.angular_velocity_base.z);
-
-  // Finite-difference angular acceleration in base frame (requires stable dt).
-  static bool has_prev = false;
-  static double prev_stamp_sec = 0.0;
-  static tf2::Vector3 prev_omega_base(0.0, 0.0, 0.0);
-
-  tf2::Vector3 alpha_base(0.0, 0.0, 0.0);
-  const double stamp_sec =
-    static_cast<double>(msg.header.stamp.sec) +
-    static_cast<double>(msg.header.stamp.nanosec) * 1.0e-9;
-  if (has_prev) {
-    const double dt_lever = stamp_sec - prev_stamp_sec;
-    if (dt_lever > 0.0) {
-      alpha_base = (omega_base - prev_omega_base) / dt_lever;
-    }
-  }
-  prev_stamp_sec = stamp_sec;
-  prev_omega_base = omega_base;
-  has_prev = true;
-
-  const tf2::Vector3 correction_base =
-    alpha_base.cross(r_base) + omega_base.cross(omega_base.cross(r_base));
-
-  out.linear_acceleration_base.x -= correction_base.x();
-  out.linear_acceleration_base.y -= correction_base.y();
-  out.linear_acceleration_base.z -= correction_base.z();
-#endif
+  // Step 5: base_link 변환
+  transform_to_base(
+    gyro_filtered, accel_no_gravity, tf_imu_to_base,
+    out.angular_velocity_base, out.linear_acceleration_base);
 
   return ImuPreprocessStatus::kOk;
 }

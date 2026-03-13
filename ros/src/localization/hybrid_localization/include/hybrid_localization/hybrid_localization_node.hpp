@@ -69,6 +69,14 @@ private:
     const std_srvs::srv::SetBool::Request::SharedPtr req,
     std_srvs::srv::SetBool::Response::SharedPtr res);
 
+  // ---- Callback groups (one per frequency domain) -------------------------
+  // IMU(200Hz): 전용 그룹 — 다른 콜백에 블록되지 않도록 격리
+  rclcpp::CallbackGroup::SharedPtr m_imu_cb_group_;
+  // GNSS/Vehicle/Heading(1-10Hz): 상호 배타적 — 상태 갱신 충돌 방지
+  rclcpp::CallbackGroup::SharedPtr m_sensor_cb_group_;
+  // 발행 타이머(200Hz): 독립 그룹
+  rclcpp::CallbackGroup::SharedPtr m_timer_cb_group_;
+
   // ---- Publishers ---------------------------------------------------------
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_odom_pub;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr m_pose_pub;

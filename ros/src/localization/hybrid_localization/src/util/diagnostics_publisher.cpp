@@ -24,7 +24,7 @@ diagnostic_msgs::msg::DiagnosticArray EskfDiagnosticsPublisher::build(
   diag_array.header.stamp = stamp;
 
   diagnostic_msgs::msg::DiagnosticStatus status;
-  status.name = "eskf_localization";
+  status.name = "hybrid_localization";
   status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
   status.message = "Phase 7: ESKF running";
 
