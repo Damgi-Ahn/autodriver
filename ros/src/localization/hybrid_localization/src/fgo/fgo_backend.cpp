@@ -74,8 +74,8 @@ void FgoBackend::initialize(
 
   // ISAM2 파라미터 설정
   gtsam::ISAM2Params isam2_params;
-  isam2_params.relinearizeThreshold = 0.1;
-  isam2_params.relinearizeSkip = 1;
+  isam2_params.relinearizeThreshold = params_.isam2_relinearize_threshold;
+  isam2_params.relinearizeSkip = params_.isam2_relinearize_skip;
   isam2_params.enablePartialRelinearizationCheck = true;
   isam2_ = gtsam::ISAM2(isam2_params);
 
@@ -117,12 +117,12 @@ void FgoBackend::initialize(
     sigma_a * sigma_a * gtsam::I_3x3);
   gtsam_preint_params_->setGyroscopeCovariance(
     sigma_g * sigma_g * gtsam::I_3x3);
-  gtsam_preint_params_->setIntegrationCovariance(1e-8 * gtsam::I_3x3);
+  gtsam_preint_params_->setIntegrationCovariance(params_.isam2_integration_cov * gtsam::I_3x3);
   gtsam_preint_params_->biasAccCovariance =
     sigma_ba * sigma_ba * gtsam::I_3x3;
   gtsam_preint_params_->biasOmegaCovariance =
     sigma_bg * sigma_bg * gtsam::I_3x3;
-  gtsam_preint_params_->biasAccOmegaInt = 1e-5 * gtsam::I_6x6;
+  gtsam_preint_params_->biasAccOmegaInt = params_.isam2_bias_acc_omega_int * gtsam::I_6x6;
 
   initialized_ = true;
   first_keyframe_ = true;

@@ -50,6 +50,32 @@ struct HeadingYawParams
   // - rate gate 복구 바이패스 시 yaw_var를 일시적으로 inflate하여 업데이트를 약하게 적용.
   // - <1이면 1로 클램프
   double rate_gate_bypass_yaw_var_scale{10.0};
+
+  // `heading.rate_gate_init_grace_sec` [s]
+  // - ESKF 초기화 직후 이 시간 동안 rate gate를 비활성화(초기 수렴 보호).
+  // - <=0: grace period 없음(초기화 즉시 rate gate 적용)
+  double rate_gate_init_grace_sec{5.0};
+
+  // `heading.event_inflate_invalid` [-]
+  // - 헤딩 값 자체가 비정상(non-finite, gnss_status=-1)일 때 적용하는 peak inflate.
+  double event_inflate_invalid{64.0};
+
+  // `heading.event_inflate_timeout` [-]
+  // - 헤딩 타임아웃, GNSS status skip, recover holdoff 이벤트 시 peak inflate.
+  double event_inflate_timeout{16.0};
+
+  // `heading.event_inflate_rate_gate` [-]
+  // - rate gate skip 이벤트 시 peak inflate.
+  double event_inflate_rate_gate{8.0};
+
+  // `heading.event_inflate_default` [-]
+  // - 기타(분류되지 않은) 이벤트 시 적용하는 peak inflate.
+  double event_inflate_default{4.0};
+
+  // `heading.recover_peak_min_inflate` [-]
+  // - 헤딩 status 개선 시 recover peak의 하한값.
+  // - 이전 status inflate와 비교하여 더 큰 값을 사용.
+  double recover_peak_min_inflate{4.0};
 };
 
 struct VehicleConstraintParams
@@ -125,6 +151,12 @@ struct GnssParams
     // `gnss.recover.vel_max_inflate` [-]
     // - recover peak 추정이 어려울 때 사용하는 velocity inflate fallback.
     double vel_max_inflate{50.0};
+
+    // `gnss.recover.decay_exponent` [-]
+    // - recover inflate 지수 감쇠 형태 파라미터.
+    // - t=ramp_sec 시점에서 inflate가 exp(-decay_exponent) 비율로 감쇠됨.
+    // - 기본값 5.0: exp(-5) ≈ 0.007 (ramp_sec 경과 시 99.3% 감쇠)
+    double decay_exponent{5.0};
   };
 
   // `enable_gnss_pos_update` / `enable_gnss_vel_update`
@@ -170,6 +202,10 @@ struct GnssParams
   // `heading.min_gnss_status_for_yaw_update`
   // - 이 status 미만이면 GPHDT yaw 업데이트를 차단(arb에서 사용).
   int min_status_for_yaw_update{1};
+
+  // `gnss.heading_neg_status_inflate` [-]
+  // - GNSS status < 0(fix 없음)일 때 헤딩 yaw 측정 노이즈 inflate 배율.
+  double heading_neg_status_inflate{64.0};
 
   // `gnss.vel_inflate_status_fix/sbas`
   // - GNSS status가 나쁠 때 속도 분산을 inflate하여 영향력을 낮춤.
@@ -257,6 +293,13 @@ struct HybridLocalizationNodeParams
 
   // GNSS 불량 → DEGRADED 상태 전이 타임아웃 [s]
   double gnss_degraded_timeout_sec{5.0};
+
+  // IMU 정지 캘리브레이션 수집 시간 [s]
+  double imu_calibration_duration_sec{30.0};
+
+  // 진단 메시지 발행 주기 분주기 [-]
+  // - publish_rate(200Hz) 기준 diag_publish_divider=10이면 20Hz로 발행.
+  int diag_publish_divider{10};
 
   // 캘리브레이션 관련
   bool init_imu_calibration{false};

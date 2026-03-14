@@ -202,7 +202,7 @@ void HybridLocalizationNode::publish_timer_callback()
   }
 
   // 진단은 주기 다운샘플링 (기본 10회마다 1회)
-  if (++diag_counter_ >= 10) {
+  if (++diag_counter_ >= static_cast<size_t>(std::max(1, node_params_.diag_publish_divider))) {
     diag_counter_ = 0;
 
     EskfDiagnosticsInput diag_input;

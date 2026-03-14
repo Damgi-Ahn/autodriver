@@ -90,3 +90,37 @@
     vehicle_wheelbase_m: 2.85
     vehicle_steer_yaw_rate_var: 0.01
     vehicle_steer_min_speed_mps: 1.0
+
+    # -----------------------------------------------------------------------
+    # 헤딩 이벤트 inflate (이상/타임아웃/rate-gate별 peak inflate)
+    # -----------------------------------------------------------------------
+    heading.rate_gate_init_grace_sec: 5.0   # [s] ESKF 초기화 후 rate-gate 유예 시간
+    heading.event_inflate_invalid: 64.0     # [-] 비정상 헤딩(non-finite, status=-1) peak
+    heading.event_inflate_timeout: 16.0     # [-] 타임아웃/GNSS status skip peak
+    heading.event_inflate_rate_gate: 8.0    # [-] rate-gate skip peak
+    heading.event_inflate_default: 4.0      # [-] 기타 이벤트 peak
+    heading.recover_peak_min_inflate: 4.0   # [-] 헤딩 status 개선 시 recover peak 하한
+
+    # -----------------------------------------------------------------------
+    # GNSS 헤딩 status inflate
+    # -----------------------------------------------------------------------
+    gnss.heading_neg_status_inflate: 64.0   # [-] GNSS status < 0 시 헤딩 inflate
+
+    # -----------------------------------------------------------------------
+    # GNSS recover 감쇠 파라미터
+    # -----------------------------------------------------------------------
+    gnss.recover.decay_exponent: 5.0        # [-] exp(-decay_exponent) 비율로 감쇠, 기본 exp(-5)≈0.007
+
+    # -----------------------------------------------------------------------
+    # IMU 캘리브레이션 / 진단
+    # -----------------------------------------------------------------------
+    imu_calibration_duration_sec: 30.0      # [s] 정지 캘리브레이션 수집 시간
+    diag_publish_divider: 10                # [-] 진단 발행 주기 분주기 (200Hz/10=20Hz)
+
+    # -----------------------------------------------------------------------
+    # FGO 백엔드 ISAM2 파라미터
+    # -----------------------------------------------------------------------
+    fgo.backend.isam2_relinearize_threshold: 0.1   # [-] 재선형화 트리거 임계값
+    fgo.backend.isam2_relinearize_skip: 1           # [-] 매 N번째 업데이트마다 재선형화 체크
+    fgo.backend.isam2_integration_cov: 1.0e-8       # [-] IMU 수치 적분 잡음 공분산 스케일
+    fgo.backend.isam2_bias_acc_omega_int: 1.0e-5    # [-] 바이어스 적분 잡음 공분산 스케일

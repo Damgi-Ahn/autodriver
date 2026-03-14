@@ -170,9 +170,9 @@ HybridLocalizationNode::HybridLocalizationNode(const rclcpp::NodeOptions & t_opt
   if (node_params_.init_imu_calibration) {
     RCLCPP_INFO(
       this->get_logger(), "Starting IMU calibration (duration: %.1f seconds)",
-      IMU_CALIBRATION_DURATION_SEC);
+      node_params_.imu_calibration_duration_sec);
     RCLCPP_WARN(this->get_logger(), "Please ensure the vehicle is stationary during calibration!");
-    imu_calibration_manager_.start(this->now(), IMU_CALIBRATION_DURATION_SEC);
+    imu_calibration_manager_.start(this->now(), node_params_.imu_calibration_duration_sec);
   } else {
     if (imu_preprocessor_.load_calibration(
         node_params_.calibration_file_path))

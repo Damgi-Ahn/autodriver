@@ -72,6 +72,23 @@ public:
     // 적응형 윈도우 크기 설정
     bool adaptive_window_enable{false};
     int  adaptive_window_max{40};   // GNSS 불량 시 확장되는 최대 윈도우 크기
+
+    // ISAM2 최적화 파라미터
+    // `fgo.backend.isam2_relinearize_threshold` [-]
+    // - 재선형화 트리거 임계값(변수 delta). ↓: 더 자주 재선형화(정확↑, 비용↑)
+    double isam2_relinearize_threshold{0.1};
+
+    // `fgo.backend.isam2_relinearize_skip` [-]
+    // - 매 N번째 업데이트마다 재선형화 체크. 1=매 업데이트마다 체크.
+    int isam2_relinearize_skip{1};
+
+    // `fgo.backend.isam2_integration_cov` [-]
+    // - IMU 수치 적분 잡음 공분산(I_3x3 스케일). ↑: 적분 불확실성 증가
+    double isam2_integration_cov{1e-8};
+
+    // `fgo.backend.isam2_bias_acc_omega_int` [-]
+    // - 바이어스 적분 잡음 공분산(I_6x6 스케일). ↑: 바이어스 추적 불확실성 증가
+    double isam2_bias_acc_omega_int{1e-5};
   };
 
   // ----- 최적화 결과 -------------------------------------------------------
