@@ -1,4 +1,5 @@
 #include "hybrid_localization_evaluation_tool/ui/fusion_quality_tab.hpp"
+#include "hybrid_localization_evaluation_tool/innovation_analyzer.hpp"
 
 #include <QFont>
 #include <QGroupBox>
@@ -16,6 +17,42 @@
 namespace autodriver::tools {
 
 namespace {
+
+QChartView* BuildAcfChart(const QString& title,
+                           QLineSeries* acf_series,
+                           QLineSeries* sig_hi,
+                           QLineSeries* sig_lo)
+{
+  acf_series->setName("ACF");
+  acf_series->setColor(QColor("#3498db"));
+
+  const QPen sig_pen(QColor("#e74c3c"), 1, Qt::DashLine);
+  sig_hi->setPen(sig_pen); sig_hi->setName("+sig");
+  sig_lo->setPen(sig_pen); sig_lo->setName("-sig");
+
+  auto* chart = new QChart();
+  chart->setTitle(title);
+  chart->setBackgroundBrush(QColor("#10151c"));
+  chart->setTitleBrush(QBrush(QColor("#a3b1c6")));
+  chart->setTitleFont(QFont("Noto Sans", 9));
+  chart->setMargins(QMargins(4, 4, 4, 4));
+  chart->legend()->setVisible(false);
+  chart->addSeries(acf_series);
+  chart->addSeries(sig_hi);
+  chart->addSeries(sig_lo);
+
+  auto* ax = new QValueAxis(); ax->setLabelsColor(QColor("#8a93a3")); ax->setTitleText("lag");
+  auto* ay = new QValueAxis(); ay->setLabelsColor(QColor("#8a93a3")); ay->setRange(-1.0, 1.0);
+  chart->addAxis(ax, Qt::AlignBottom); chart->addAxis(ay, Qt::AlignLeft);
+  for (auto* s : {acf_series, sig_hi, sig_lo}) {
+    s->attachAxis(ax); s->attachAxis(ay);
+  }
+
+  auto* view = new QChartView(chart);
+  view->setRenderHint(QPainter::Antialiasing);
+  view->setMinimumHeight(120);
+  return view;
+}
 
 QChartView* BuildNisChart(const QString& title,
                           QLineSeries* nis_series,
@@ -99,6 +136,13 @@ FusionQualityTab::FusionQualityTab(const std::shared_ptr<RosQtBridge>& bridge,
                                    QWidget* parent)
     : QWidget(parent), bridge_(bridge)
 {
+  // ACF series
+  acf_pos_series_     = new QLineSeries(); acf_vel_series_     = new QLineSeries();
+  acf_heading_series_ = new QLineSeries();
+  acf_sig_pos_hi_     = new QLineSeries(); acf_sig_pos_lo_     = new QLineSeries();
+  acf_sig_vel_hi_     = new QLineSeries(); acf_sig_vel_lo_     = new QLineSeries();
+  acf_sig_hdg_hi_     = new QLineSeries(); acf_sig_hdg_lo_     = new QLineSeries();
+
   nis_pos_series_      = new QLineSeries(); nis_pos_series_->setColor(QColor("#3498db"));
   nis_vel_series_      = new QLineSeries(); nis_vel_series_->setColor(QColor("#2ecc71"));
   nis_heading_series_  = new QLineSeries(); nis_heading_series_->setColor(QColor("#e67e22"));
@@ -166,6 +210,32 @@ FusionQualityTab::FusionQualityTab(const std::shared_ptr<RosQtBridge>& bridge,
   res_layout->addWidget(BuildResidualChart("Vel residual", res_vel_series_));
   res_layout->addWidget(BuildResidualChart("Heading residual (rad)", res_heading_series_));
   right->addWidget(res_box);
+
+  // ---- ACF section ---------------------------------------------------------
+  auto* acf_box = new QGroupBox("Innovation ACF  (model mismatch detector)");
+  acf_box->setStyleSheet("QGroupBox{color:#f39c12; border:1px solid #2c3e50; margin-top:8px;}"
+                         "QGroupBox::title{subcontrol-origin:margin; left:8px;}");
+  auto* acf_layout = new QVBoxLayout(acf_box);
+
+  auto* acf_warn_row = new QHBoxLayout();
+  acf_pos_warn_     = new QLabel("GNSS Pos ACF: OK");
+  acf_vel_warn_     = new QLabel("GNSS Vel ACF: OK");
+  acf_heading_warn_ = new QLabel("Heading ACF: OK");
+  for (auto* lbl : {acf_pos_warn_, acf_vel_warn_, acf_heading_warn_}) {
+    lbl->setStyleSheet("color:#27ae60; font-size:11px;");
+    acf_warn_row->addWidget(lbl);
+  }
+  acf_layout->addLayout(acf_warn_row);
+
+  auto* acf_charts_row = new QHBoxLayout();
+  acf_charts_row->addWidget(BuildAcfChart("GNSS Pos ACF",
+      acf_pos_series_, acf_sig_pos_hi_, acf_sig_pos_lo_));
+  acf_charts_row->addWidget(BuildAcfChart("GNSS Vel ACF",
+      acf_vel_series_, acf_sig_vel_hi_, acf_sig_vel_lo_));
+  acf_charts_row->addWidget(BuildAcfChart("Heading ACF",
+      acf_heading_series_, acf_sig_hdg_hi_, acf_sig_hdg_lo_));
+  acf_layout->addLayout(acf_charts_row);
+  right->addWidget(acf_box);
 
   root->addLayout(left, 1);
   root->addLayout(right, 3);
@@ -241,6 +311,41 @@ void FusionQualityTab::Refresh(const BridgeData& d)
     if (s.gnss_vel_residual_norm.has_value())res_vel_series_->append(t,     *s.gnss_vel_residual_norm);
     if (s.heading_yaw_residual_rad.has_value()) res_heading_series_->append(t, std::abs(*s.heading_yaw_residual_rad));
   }
+
+  // ---- ACF update ----------------------------------------------------------
+  if (!d.acf.valid) return;
+
+  const auto refresh_acf = [](const AcfValues& av,
+                               QLineSeries* acf_s,
+                               QLineSeries* sig_hi,
+                               QLineSeries* sig_lo,
+                               QLabel* warn_lbl,
+                               const QString& ch_name)
+  {
+    acf_s->clear(); sig_hi->clear(); sig_lo->clear();
+    if (av.acf.empty()) return;
+    const double sig = av.significance;
+    const double max_lag = av.lags.back();
+    sig_hi->append(0.0, sig); sig_hi->append(max_lag + 0.5, sig);
+    sig_lo->append(0.0, -sig); sig_lo->append(max_lag + 0.5, -sig);
+    for (size_t i = 0; i < av.acf.size(); ++i) {
+      acf_s->append(av.lags[i], av.acf[i]);
+    }
+    if (av.model_mismatch) {
+      warn_lbl->setText(QString("%1 ACF: ⚠ MODEL MISMATCH").arg(ch_name));
+      warn_lbl->setStyleSheet("color:#e74c3c; font-size:11px; font-weight:bold;");
+    } else {
+      warn_lbl->setText(QString("%1 ACF: OK").arg(ch_name));
+      warn_lbl->setStyleSheet("color:#27ae60; font-size:11px;");
+    }
+  };
+
+  refresh_acf(d.acf.gnss_pos, acf_pos_series_, acf_sig_pos_hi_, acf_sig_pos_lo_,
+              acf_pos_warn_,     "GNSS Pos");
+  refresh_acf(d.acf.gnss_vel, acf_vel_series_, acf_sig_vel_hi_, acf_sig_vel_lo_,
+              acf_vel_warn_,     "GNSS Vel");
+  refresh_acf(d.acf.heading,  acf_heading_series_, acf_sig_hdg_hi_, acf_sig_hdg_lo_,
+              acf_heading_warn_, "Heading");
 }
 
 }  // namespace autodriver::tools

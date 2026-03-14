@@ -70,17 +70,33 @@ void RosQtBridge::UpdateHealthState(HealthState state)
 
 void RosQtBridge::UpdateGtData(const GroundTruthAnalyzer& analyzer)
 {
-  // Acquire GT data outside of bridge lock to avoid nested mutex issues
-  const bool      has_gt  = analyzer.has_gt();
-  const AteStats  eskf_ate = analyzer.GetEskfAte();
-  const AteStats  fgo_ate  = analyzer.GetFgoAte();
-  auto            history  = analyzer.GetErrorHistory();
+  // Acquire all GT data outside bridge lock (each getter is independently thread-safe)
+  const bool     has_gt      = analyzer.has_gt();
+  const AteStats eskf_ate    = analyzer.GetEskfAte();
+  const AteStats fgo_ate     = analyzer.GetFgoAte();
+  const RpeStats eskf_rpe_1s = analyzer.ComputeEskfRpe(1.0);
+  const RpeStats eskf_rpe_5s = analyzer.ComputeEskfRpe(5.0);
+  const RpeStats fgo_rpe_1s  = analyzer.ComputeFgoRpe(1.0);
+  const RpeStats fgo_rpe_5s  = analyzer.ComputeFgoRpe(5.0);
+  auto history               = analyzer.GetErrorHistory();
+  auto colored               = analyzer.GetEskfColoredTraj();
 
   std::lock_guard<std::mutex> lock(mutex_);
-  has_gt_    = has_gt;
-  eskf_ate_  = eskf_ate;
-  fgo_ate_   = fgo_ate;
-  gt_errors_ = std::move(history);
+  has_gt_       = has_gt;
+  eskf_ate_     = eskf_ate;
+  fgo_ate_      = fgo_ate;
+  eskf_rpe_1s_  = eskf_rpe_1s;
+  eskf_rpe_5s_  = eskf_rpe_5s;
+  fgo_rpe_1s_   = fgo_rpe_1s;
+  fgo_rpe_5s_   = fgo_rpe_5s;
+  gt_errors_    = std::move(history);
+  eskf_colored_ = std::move(colored);
+}
+
+void RosQtBridge::UpdateAcfData(const AcfSnapshot& acf)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  acf_ = acf;
 }
 
 BridgeData RosQtBridge::Snapshot() const
@@ -99,7 +115,13 @@ BridgeData RosQtBridge::Snapshot() const
   d.has_gt             = has_gt_;
   d.eskf_ate           = eskf_ate_;
   d.fgo_ate            = fgo_ate_;
+  d.eskf_rpe_1s        = eskf_rpe_1s_;
+  d.eskf_rpe_5s        = eskf_rpe_5s_;
+  d.fgo_rpe_1s         = fgo_rpe_1s_;
+  d.fgo_rpe_5s         = fgo_rpe_5s_;
+  d.acf                = acf_;
   d.gt_error_history   = gt_errors_;
+  d.eskf_colored_traj  = eskf_colored_;
   d.event_log          = event_log_;
   d.gnss_traj          = gnss_traj_;
   d.eskf_traj          = eskf_traj_;

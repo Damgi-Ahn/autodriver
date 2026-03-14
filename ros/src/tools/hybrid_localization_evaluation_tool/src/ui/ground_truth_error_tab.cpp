@@ -120,6 +120,23 @@ GroundTruthErrorTab::GroundTruthErrorTab(const std::shared_ptr<RosQtBridge>& bri
   yaw_layout->addWidget(yaw_error_label_);
   left_layout->addWidget(yaw_box);
 
+  // RPE box
+  auto* rpe_box = new QGroupBox("RPE — ESKF (SE2)");
+  rpe_box->setStyleSheet("QGroupBox{color:#1abc9c; border:1px solid #2c3e50; margin-top:8px;}"
+                         "QGroupBox::title{subcontrol-origin:margin; left:8px;}");
+  auto* rpe_layout = new QVBoxLayout(rpe_box);
+  auto* rpe_note = new QLabel("translation / rotation error");
+  rpe_note->setStyleSheet("color:#8a93a3; font-size:10px;");
+  rpe_layout->addWidget(rpe_note);
+  rpe1s_trans_label_ = MakeStatLabel("Δ=1s  trans: —");
+  rpe5s_trans_label_ = MakeStatLabel("Δ=5s  trans: —");
+  rpe1s_rot_label_   = MakeStatLabel("Δ=1s  rot:   —");
+  rpe5s_rot_label_   = MakeStatLabel("Δ=5s  rot:   —");
+  for (auto* l : {rpe1s_trans_label_, rpe5s_trans_label_, rpe1s_rot_label_, rpe5s_rot_label_}) {
+    rpe_layout->addWidget(l);
+  }
+  left_layout->addWidget(rpe_box);
+
   left_layout->addStretch();
   root->addWidget(left);
 
@@ -212,6 +229,20 @@ void GroundTruthErrorTab::Refresh(const BridgeData& d)
     yaw_error_label_->setText(
         QString("Latest: %1°").arg(hist.back().yaw_error_deg, 0, 'f', 2));
   }
+
+  // RPE
+  const auto fmt_rpe = [](const RpeStats& r) -> QString {
+    if (r.count == 0) return "—";
+    return QString("mean %1m  RMSE %2m").arg(r.trans_mean_m, 0, 'f', 3).arg(r.trans_rmse_m, 0, 'f', 3);
+  };
+  const auto fmt_rot = [](const RpeStats& r) -> QString {
+    if (r.count == 0) return "—";
+    return QString("mean %1°  RMSE %2°").arg(r.rot_mean_deg, 0, 'f', 2).arg(r.rot_rmse_deg, 0, 'f', 2);
+  };
+  rpe1s_trans_label_->setText(QString("Δ=1s  trans: %1").arg(fmt_rpe(d.eskf_rpe_1s)));
+  rpe5s_trans_label_->setText(QString("Δ=5s  trans: %1").arg(fmt_rpe(d.eskf_rpe_5s)));
+  rpe1s_rot_label_->setText(  QString("Δ=1s  rot:   %1").arg(fmt_rot(d.eskf_rpe_1s)));
+  rpe5s_rot_label_->setText(  QString("Δ=5s  rot:   %1").arg(fmt_rot(d.eskf_rpe_5s)));
 }
 
 }  // namespace autodriver::tools

@@ -12,6 +12,7 @@
 #include <QtCharts/QValueAxis>
 
 #include <cmath>
+#include <limits>
 
 namespace autodriver::tools {
 
@@ -68,6 +69,23 @@ PoseTrajectoryTab::PoseTrajectoryTab(const std::shared_ptr<RosQtBridge>& bridge,
   fgo_series_->setColor(QColor("#e67e22"));
   fgo_series_->setPen(QPen(QColor("#e67e22"), 2));
 
+  // Heatmap scatter series — 5 error magnitude buckets
+  static const struct { const char* name; QColor color; } kBuckets[kHeatBuckets] = {
+    {"< 0.1 m",   QColor("#27ae60")},   // green
+    {"0.1–0.3 m", QColor("#f1c40f")},   // yellow
+    {"0.3–0.5 m", QColor("#e67e22")},   // orange
+    {"0.5–1.0 m", QColor("#e74c3c")},   // red
+    {"> 1.0 m",   QColor("#8e1a1a")},   // dark red
+  };
+  for (int i = 0; i < kHeatBuckets; ++i) {
+    heat_series_[i] = new QScatterSeries();
+    heat_series_[i]->setName(kBuckets[i].name);
+    heat_series_[i]->setColor(kBuckets[i].color);
+    heat_series_[i]->setBorderColor(Qt::transparent);
+    heat_series_[i]->setMarkerSize(6.0);
+    heat_series_[i]->setVisible(false);  // off by default
+  }
+
   auto* chart = new QChart();
   chart->setBackgroundBrush(QColor("#10151c"));
   chart->setTitle("2D Trajectory");
@@ -78,6 +96,7 @@ PoseTrajectoryTab::PoseTrajectoryTab(const std::shared_ptr<RosQtBridge>& bridge,
   chart->addSeries(gnss_series_);
   chart->addSeries(eskf_series_);
   chart->addSeries(fgo_series_);
+  for (int i = 0; i < kHeatBuckets; ++i) chart->addSeries(heat_series_[i]);
 
   auto* ax = new QValueAxis(); ax->setLabelsColor(QColor("#8a93a3")); ax->setTitleText("E (m)");
   auto* ay = new QValueAxis(); ay->setLabelsColor(QColor("#8a93a3")); ay->setTitleText("N (m)");
@@ -86,6 +105,10 @@ PoseTrajectoryTab::PoseTrajectoryTab(const std::shared_ptr<RosQtBridge>& bridge,
   gnss_series_->attachAxis(ax); gnss_series_->attachAxis(ay);
   eskf_series_->attachAxis(ax); eskf_series_->attachAxis(ay);
   fgo_series_->attachAxis(ax);  fgo_series_->attachAxis(ay);
+  for (int i = 0; i < kHeatBuckets; ++i) {
+    heat_series_[i]->attachAxis(ax);
+    heat_series_[i]->attachAxis(ay);
+  }
 
   traj_view_ = new QChartView(chart);
   traj_view_->setRenderHint(QPainter::Antialiasing);
@@ -119,16 +142,23 @@ PoseTrajectoryTab::PoseTrajectoryTab(const std::shared_ptr<RosQtBridge>& bridge,
   // Layer toggles
   auto* toggle_box = new QGroupBox("Trajectory Layers");
   toggle_box->setStyleSheet("QGroupBox{color:#a3b1c6;border:1px solid #2c3e50;margin-top:8px;}");
-  auto* tg_layout = new QHBoxLayout(toggle_box);
-  gnss_toggle_ = new QCheckBox("GNSS");  gnss_toggle_->setChecked(true);
-  eskf_toggle_ = new QCheckBox("ESKF");  eskf_toggle_->setChecked(true);
-  fgo_toggle_  = new QCheckBox("FGO");   fgo_toggle_->setChecked(true);
+  auto* tg_layout = new QVBoxLayout(toggle_box);
+  auto* tg_row1   = new QHBoxLayout();
+  gnss_toggle_ = new QCheckBox("GNSS");    gnss_toggle_->setChecked(true);
+  eskf_toggle_ = new QCheckBox("ESKF");    eskf_toggle_->setChecked(true);
+  fgo_toggle_  = new QCheckBox("FGO");     fgo_toggle_->setChecked(true);
   gnss_toggle_->setStyleSheet("color:#3498db;");
   eskf_toggle_->setStyleSheet("color:#2ecc71;");
   fgo_toggle_->setStyleSheet("color:#e67e22;");
-  tg_layout->addWidget(gnss_toggle_);
-  tg_layout->addWidget(eskf_toggle_);
-  tg_layout->addWidget(fgo_toggle_);
+  tg_row1->addWidget(gnss_toggle_);
+  tg_row1->addWidget(eskf_toggle_);
+  tg_row1->addWidget(fgo_toggle_);
+  tg_layout->addLayout(tg_row1);
+
+  heatmap_toggle_ = new QCheckBox("Error Heatmap (ATE)");
+  heatmap_toggle_->setChecked(false);
+  heatmap_toggle_->setStyleSheet("color:#f39c12;");
+  tg_layout->addWidget(heatmap_toggle_);
   left->addWidget(toggle_box);
   left->addStretch();
 
@@ -148,6 +178,9 @@ PoseTrajectoryTab::PoseTrajectoryTab(const std::shared_ptr<RosQtBridge>& bridge,
   connect(fgo_toggle_, &QCheckBox::toggled, this, [this](bool v) {
     fgo_series_->setVisible(v);
   });
+  connect(heatmap_toggle_, &QCheckBox::toggled, this, [this](bool v) {
+    for (int i = 0; i < kHeatBuckets; ++i) heat_series_[i]->setVisible(v);
+  });
 }
 
 void PoseTrajectoryTab::Refresh(const BridgeData& d)
@@ -164,9 +197,9 @@ void PoseTrajectoryTab::Refresh(const BridgeData& d)
   gnss_series_->clear();
   eskf_series_->clear();
   fgo_series_->clear();
+  for (int i = 0; i < kHeatBuckets; ++i) heat_series_[i]->clear();
 
-  // Compute a common origin offset for local coordinate display
-  // Use first ESKF point as origin if available, else GNSS
+  // Local coordinate origin: first ESKF point, else first GNSS point
   double ox = 0.0, oy = 0.0;
   if (!d.eskf_traj.empty()) {
     ox = d.eskf_traj.front().x;
@@ -176,14 +209,20 @@ void PoseTrajectoryTab::Refresh(const BridgeData& d)
     oy = d.gnss_traj.front().y;
   }
 
-  for (const auto& pt : d.gnss_traj) {
-    gnss_series_->append(pt.x - ox, pt.y - oy);
-  }
-  for (const auto& pt : d.eskf_traj) {
-    eskf_series_->append(pt.x - ox, pt.y - oy);
-  }
-  for (const auto& pt : d.fgo_traj) {
-    fgo_series_->append(pt.x - ox, pt.y - oy);
+  for (const auto& pt : d.gnss_traj)  gnss_series_->append(pt.x - ox, pt.y - oy);
+  for (const auto& pt : d.eskf_traj)  eskf_series_->append(pt.x - ox, pt.y - oy);
+  for (const auto& pt : d.fgo_traj)   fgo_series_->append(pt.x - ox, pt.y - oy);
+
+  // Heatmap: distribute coloured ESKF points into error-magnitude buckets
+  if (heatmap_toggle_->isChecked()) {
+    static constexpr double kThresholds[kHeatBuckets] = {0.1, 0.3, 0.5, 1.0,
+                                                          std::numeric_limits<double>::max()};
+    for (const auto& pt : d.eskf_colored_traj) {
+      const double x = pt.x - ox, y = pt.y - oy;
+      for (int b = 0; b < kHeatBuckets; ++b) {
+        if (pt.ate_m < kThresholds[b]) { heat_series_[b]->append(x, y); break; }
+      }
+    }
   }
 }
 

@@ -35,6 +35,12 @@ class GroundTruthErrorTab : public QWidget {
   // Yaw error
   QLabel* yaw_error_label_ = nullptr;
 
+  // RPE stats (ESKF)
+  QLabel* rpe1s_trans_label_  = nullptr;
+  QLabel* rpe5s_trans_label_  = nullptr;
+  QLabel* rpe1s_rot_label_    = nullptr;
+  QLabel* rpe5s_rot_label_    = nullptr;
+
   // GT status
   QLabel* gt_status_label_ = nullptr;
   QLabel* sample_count_label_ = nullptr;

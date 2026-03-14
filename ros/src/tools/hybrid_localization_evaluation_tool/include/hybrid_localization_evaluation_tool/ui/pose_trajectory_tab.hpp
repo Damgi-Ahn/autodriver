@@ -32,14 +32,19 @@ class PoseTrajectoryTab : public QWidget {
   QLabel* fgo_yaw_label_    = nullptr;
 
   // Layer toggles
-  QCheckBox* gnss_toggle_  = nullptr;
-  QCheckBox* eskf_toggle_  = nullptr;
-  QCheckBox* fgo_toggle_   = nullptr;
+  QCheckBox* gnss_toggle_    = nullptr;
+  QCheckBox* eskf_toggle_    = nullptr;
+  QCheckBox* fgo_toggle_     = nullptr;
+  QCheckBox* heatmap_toggle_ = nullptr;
 
   // Trajectory series
-  QScatterSeries* gnss_series_ = nullptr;
-  QLineSeries*    eskf_series_ = nullptr;
-  QLineSeries*    fgo_series_  = nullptr;
+  QScatterSeries* gnss_series_  = nullptr;
+  QLineSeries*    eskf_series_  = nullptr;
+  QLineSeries*    fgo_series_   = nullptr;
+
+  // Heatmap: 5 error-magnitude buckets
+  static constexpr int kHeatBuckets = 5;
+  QScatterSeries* heat_series_[kHeatBuckets] = {};
 
   QChartView* traj_view_ = nullptr;
 };

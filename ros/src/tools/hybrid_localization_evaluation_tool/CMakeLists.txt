@@ -21,6 +21,7 @@ add_library(hybrid_localization_evaluation_tool_lib STATIC
   src/storage_exporter.cpp
   src/health_state_engine.cpp
   src/ground_truth_analyzer.cpp
+  src/innovation_analyzer.cpp
   src/main_window.cpp
   src/ui/overview_tab.cpp
   src/ui/fusion_quality_tab.cpp

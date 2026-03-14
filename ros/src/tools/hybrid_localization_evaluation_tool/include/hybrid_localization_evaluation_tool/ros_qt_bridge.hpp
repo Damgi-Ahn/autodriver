@@ -4,6 +4,7 @@
 #include "hybrid_localization_evaluation_tool/diagnostic_parser.hpp"
 #include "hybrid_localization_evaluation_tool/ground_truth_analyzer.hpp"
 #include "hybrid_localization_evaluation_tool/health_state_engine.hpp"
+#include "hybrid_localization_evaluation_tool/innovation_analyzer.hpp"
 #include "hybrid_localization_evaluation_tool/kpi_engine.hpp"
 #include "hybrid_localization_evaluation_tool/session_store.hpp"
 
@@ -47,6 +48,18 @@ struct BridgeData {
   AteStats                   fgo_ate;
   std::vector<GtErrorSample> gt_error_history;
 
+  // RPE (Relative Pose Error)
+  RpeStats eskf_rpe_1s;
+  RpeStats eskf_rpe_5s;
+  RpeStats fgo_rpe_1s;
+  RpeStats fgo_rpe_5s;
+
+  // Innovation ACF analysis
+  AcfSnapshot acf;
+
+  // Trajectory heatmap (ESKF coloured by ATE)
+  std::vector<ColoredTrajectoryPoint> eskf_colored_traj;
+
   std::vector<AlertEvent>      event_log;
   std::vector<TrajectoryPoint> gnss_traj;
   std::vector<TrajectoryPoint> eskf_traj;
@@ -69,6 +82,7 @@ class RosQtBridge {
   void UpdateTrajectories(const SessionStore& store);
   void UpdateHealthState(HealthState state);
   void UpdateGtData(const GroundTruthAnalyzer& analyzer);
+  void UpdateAcfData(const AcfSnapshot& acf);
 
   // Qt thread: atomically copy everything into BridgeData
   BridgeData Snapshot() const;
@@ -95,7 +109,11 @@ class RosQtBridge {
   bool         has_gt_       = false;
   AteStats     eskf_ate_;
   AteStats     fgo_ate_;
-  std::vector<GtErrorSample>   gt_errors_;
+  RpeStats     eskf_rpe_1s_,  eskf_rpe_5s_;
+  RpeStats     fgo_rpe_1s_,   fgo_rpe_5s_;
+  AcfSnapshot  acf_;
+  std::vector<GtErrorSample>          gt_errors_;
+  std::vector<ColoredTrajectoryPoint> eskf_colored_;
   std::vector<AlertEvent>      event_log_;
   std::vector<TrajectoryPoint> gnss_traj_;
   std::vector<TrajectoryPoint> eskf_traj_;

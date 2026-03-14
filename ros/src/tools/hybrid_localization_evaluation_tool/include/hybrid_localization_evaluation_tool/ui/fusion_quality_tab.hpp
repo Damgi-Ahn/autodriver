@@ -55,6 +55,22 @@ class FusionQualityTab : public QWidget {
   QLineSeries* res_vel_series_     = nullptr;
   QLineSeries* res_heading_series_ = nullptr;
 
+  // ACF series and significance lines
+  QLineSeries* acf_pos_series_     = nullptr;
+  QLineSeries* acf_vel_series_     = nullptr;
+  QLineSeries* acf_heading_series_ = nullptr;
+  QLineSeries* acf_sig_pos_hi_     = nullptr;
+  QLineSeries* acf_sig_pos_lo_     = nullptr;
+  QLineSeries* acf_sig_vel_hi_     = nullptr;
+  QLineSeries* acf_sig_vel_lo_     = nullptr;
+  QLineSeries* acf_sig_hdg_hi_     = nullptr;
+  QLineSeries* acf_sig_hdg_lo_     = nullptr;
+
+  // Mismatch warning labels
+  QLabel* acf_pos_warn_     = nullptr;
+  QLabel* acf_vel_warn_     = nullptr;
+  QLabel* acf_heading_warn_ = nullptr;
+
   double t_start_ = -1.0;
 };
 

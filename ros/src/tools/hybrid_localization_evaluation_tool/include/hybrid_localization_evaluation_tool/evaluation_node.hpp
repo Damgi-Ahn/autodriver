@@ -4,6 +4,7 @@
 #include "hybrid_localization_evaluation_tool/diagnostic_parser.hpp"
 #include "hybrid_localization_evaluation_tool/ground_truth_analyzer.hpp"
 #include "hybrid_localization_evaluation_tool/health_state_engine.hpp"
+#include "hybrid_localization_evaluation_tool/innovation_analyzer.hpp"
 #include "hybrid_localization_evaluation_tool/kpi_engine.hpp"
 #include "hybrid_localization_evaluation_tool/ros_qt_bridge.hpp"
 #include "hybrid_localization_evaluation_tool/session_store.hpp"
@@ -56,6 +57,7 @@ class EvaluationNode : public rclcpp::Node {
   StorageExporter              exporter_;
   HealthStateEngine            health_engine_;
   GroundTruthAnalyzer          gt_analyzer_;
+  InnovationAnalyzer           innovation_analyzer_;
 
   // --- Subscriptions ---
   rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr        diag_sub_;
