@@ -58,8 +58,7 @@ inline double heading_status_inflate(
   const int status)
 {
   if (status < 0) {
-    constexpr double kNegStatusInflate = 64.0;
-    return kNegStatusInflate;
+    return sanitize_inflate(gnss.heading_neg_status_inflate);
   }
   if (status == 0) {
     return sanitize_inflate(gnss.vel_inflate_status_fix);
@@ -87,7 +86,9 @@ inline double recover_peak_from_transition(
   return (fallback > 1.0) ? fallback : 1.0;
 }
 
-double heading_event_peak_inflate(const std::string & reason)
+double heading_event_peak_inflate(
+  const std::string & reason,
+  const HeadingYawParams & heading)
 {
   if (reason.empty()) {
     return 1.0;
@@ -104,18 +105,18 @@ double heading_event_peak_inflate(const std::string & reason)
     reason.find("heading_non_finite") != std::string::npos ||
     reason.find("non_finite") != std::string::npos)
   {
-    return 64.0;
+    return std::max(1.0, heading.event_inflate_invalid);
   }
   if (reason.find("heading_timeout") != std::string::npos ||
     reason.find("gnss_status_skip") != std::string::npos ||
     reason.find("recover_holdoff") != std::string::npos)
   {
-    return 16.0;
+    return std::max(1.0, heading.event_inflate_timeout);
   }
   if (reason.find("rate_gate_skip") != std::string::npos) {
-    return 8.0;
+    return std::max(1.0, heading.event_inflate_rate_gate);
   }
-  return 4.0;
+  return std::max(1.0, heading.event_inflate_default);
 }
 
 } // namespace
@@ -220,8 +221,7 @@ bool HybridLocalizationNode::compute_gnss_recover_inflate(
   // - lower input decays naturally with exponential tail
   const double ramp_sec = std::max(0.0, recover.ramp_sec);
   if (ramp_sec > 0.0 && dt_sec > 0.0 && inflate_state > 1.0) {
-    constexpr double kDecayAtRampSec = 5.0;  // exp(-5) ~= 0.0067
-    const double tau_sec = ramp_sec / kDecayAtRampSec;
+    const double tau_sec = ramp_sec / std::max(1e-6, recover.decay_exponent);
     if (tau_sec > 0.0) {
       inflate_state = 1.0 + (inflate_state - 1.0) * std::exp(-dt_sec / tau_sec);
     }
@@ -338,7 +338,7 @@ void HybridLocalizationNode::update_heading_recover_state(
   const double peak = recover_peak_from_transition(
     prev_status_inflate,
     curr_status_inflate,
-    std::max(4.0, prev_status_inflate));
+    std::max(node_params_.heading.recover_peak_min_inflate, prev_status_inflate));
   heading_recover_inflate_ = std::max(heading_recover_inflate_, peak);
 }
 
@@ -346,7 +346,7 @@ void HybridLocalizationNode::raise_heading_recover_inflate(
   const std::string & reason,
   const rclcpp::Time & stamp)
 {
-  const double peak = heading_event_peak_inflate(reason);
+  const double peak = heading_event_peak_inflate(reason, node_params_.heading);
   if (!(peak > 1.0)) {
     return;
   }
@@ -984,7 +984,7 @@ void HybridLocalizationNode::heading_callback(
       const double since_init_sec = (current_stamp - eskf_init_stamp_).seconds();
       apply_rate_gate =
         std::isfinite(since_init_sec) &&
-        (since_init_sec >= k_heading_rate_gate_init_grace_sec_);
+        (since_init_sec >= node_params_.heading.rate_gate_init_grace_sec);
     }
   }
 
