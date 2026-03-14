@@ -19,6 +19,8 @@ add_library(hybrid_localization_evaluation_tool_lib STATIC
   src/session_store.cpp
   src/ros_qt_bridge.cpp
   src/storage_exporter.cpp
+  src/health_state_engine.cpp
+  src/ground_truth_analyzer.cpp
   src/main_window.cpp
   src/ui/overview_tab.cpp
   src/ui/fusion_quality_tab.cpp
@@ -27,6 +29,7 @@ add_library(hybrid_localization_evaluation_tool_lib STATIC
   src/ui/pose_trajectory_tab.cpp
   src/ui/events_inspector_tab.cpp
   src/ui/export_session_tab.cpp
+  src/ui/ground_truth_error_tab.cpp
   include/hybrid_localization_evaluation_tool/ui/overview_tab.hpp
   include/hybrid_localization_evaluation_tool/ui/fusion_quality_tab.hpp
   include/hybrid_localization_evaluation_tool/ui/covariance_noise_tab.hpp
@@ -34,6 +37,7 @@ add_library(hybrid_localization_evaluation_tool_lib STATIC
   include/hybrid_localization_evaluation_tool/ui/pose_trajectory_tab.hpp
   include/hybrid_localization_evaluation_tool/ui/events_inspector_tab.hpp
   include/hybrid_localization_evaluation_tool/ui/export_session_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/ground_truth_error_tab.hpp
 )
 autodriver_set_compiler_options(hybrid_localization_evaluation_tool_lib)
 set_target_properties(hybrid_localization_evaluation_tool_lib PROPERTIES AUTOMOC ON)

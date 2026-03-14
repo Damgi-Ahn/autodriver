@@ -26,7 +26,7 @@ struct TrajectoryPoint {
 // ---------------------------------------------------------------------------
 class SessionStore {
  public:
-  static constexpr size_t kDefaultRingSize = 600;  // 60 s @ 10 Hz
+  static constexpr size_t kDefaultRingSize = 6000;  // 10 min @ 10 Hz
 
   explicit SessionStore(size_t ring_size = kDefaultRingSize);
 

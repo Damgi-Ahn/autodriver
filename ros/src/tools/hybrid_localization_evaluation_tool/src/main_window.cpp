@@ -103,6 +103,7 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
 
   tab_overview_   = new OverviewTab(bridge_);
   tab_fusion_     = new FusionQualityTab(bridge_);
+  tab_gt_error_   = new GroundTruthErrorTab(bridge_);
   tab_covariance_ = new CovarianceNoiseTab(bridge_);
   tab_timing_     = new SensorTimingTab(bridge_);
   tab_trajectory_ = new PoseTrajectoryTab(bridge_);
@@ -111,6 +112,7 @@ EvaluationMainWindow::EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& b
 
   tabs_->addTab(tab_overview_,   "Overview");
   tabs_->addTab(tab_fusion_,     "Fusion Quality");
+  tabs_->addTab(tab_gt_error_,   "GT Error");
   tabs_->addTab(tab_covariance_, "Covariance");
   tabs_->addTab(tab_timing_,     "Sensor Timing");
   tabs_->addTab(tab_trajectory_, "Trajectory");
@@ -168,11 +170,12 @@ void EvaluationMainWindow::UpdateUi()
   // Refresh only the active tab for the heavier updates (charts etc.)
   switch (active_idx) {
     case 1: if (tab_fusion_)     tab_fusion_->Refresh(d);     break;
-    case 2: if (tab_covariance_) tab_covariance_->Refresh(d); break;
-    case 3: if (tab_timing_)     tab_timing_->Refresh(d);     break;
-    case 4: if (tab_trajectory_) tab_trajectory_->Refresh(d); break;
-    case 5: if (tab_events_)     tab_events_->Refresh(d);     break;
-    case 6: if (tab_export_)     tab_export_->Refresh(d);     break;
+    case 2: if (tab_gt_error_)   tab_gt_error_->Refresh(d);   break;
+    case 3: if (tab_covariance_) tab_covariance_->Refresh(d); break;
+    case 4: if (tab_timing_)     tab_timing_->Refresh(d);     break;
+    case 5: if (tab_trajectory_) tab_trajectory_->Refresh(d); break;
+    case 6: if (tab_events_)     tab_events_->Refresh(d);     break;
+    case 7: if (tab_export_)     tab_export_->Refresh(d);     break;
     default: break;
   }
 

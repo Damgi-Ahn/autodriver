@@ -62,6 +62,27 @@ void RosQtBridge::UpdateTrajectories(const SessionStore& store)
   sample_history_ = std::move(hist);
 }
 
+void RosQtBridge::UpdateHealthState(HealthState state)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  health_state_ = state;
+}
+
+void RosQtBridge::UpdateGtData(const GroundTruthAnalyzer& analyzer)
+{
+  // Acquire GT data outside of bridge lock to avoid nested mutex issues
+  const bool      has_gt  = analyzer.has_gt();
+  const AteStats  eskf_ate = analyzer.GetEskfAte();
+  const AteStats  fgo_ate  = analyzer.GetFgoAte();
+  auto            history  = analyzer.GetErrorHistory();
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  has_gt_    = has_gt;
+  eskf_ate_  = eskf_ate;
+  fgo_ate_   = fgo_ate;
+  gt_errors_ = std::move(history);
+}
+
 BridgeData RosQtBridge::Snapshot() const
 {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -74,6 +95,11 @@ BridgeData RosQtBridge::Snapshot() const
   d.eskf_pose          = latest_eskf_pose_;
   d.fgo_pose           = latest_fgo_pose_;
   d.localization_state = localization_state_;
+  d.health_state       = health_state_;
+  d.has_gt             = has_gt_;
+  d.eskf_ate           = eskf_ate_;
+  d.fgo_ate            = fgo_ate_;
+  d.gt_error_history   = gt_errors_;
   d.event_log          = event_log_;
   d.gnss_traj          = gnss_traj_;
   d.eskf_traj          = eskf_traj_;

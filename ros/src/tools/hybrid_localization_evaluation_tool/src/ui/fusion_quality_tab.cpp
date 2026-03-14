@@ -134,6 +134,24 @@ FusionQualityTab::FusionQualityTab(const std::shared_ptr<RosQtBridge>& bridge,
   add_ratio_row("GNSS Vel", vel_ratio_label_, vel_reason_label_);
   add_ratio_row("Heading",  heading_ratio_label_, heading_reason_label_);
   left->addWidget(ratio_box);
+
+  // ---- NIS χ² consistency scores ------------------------------------------
+  auto* cons_box = new QGroupBox("NIS χ² Consistency");
+  cons_box->setStyleSheet("QGroupBox{color:#a3b1c6; border:1px solid #2c3e50; margin-top:8px;}"
+                          "QGroupBox::title{subcontrol-origin:margin; left:8px;}");
+  auto* cons_layout = new QVBoxLayout(cons_box);
+  auto* cons_note = new QLabel("fraction of samples within χ² gate");
+  cons_note->setStyleSheet("color:#8a93a3; font-size:10px;");
+  cons_layout->addWidget(cons_note);
+  nis_pos_consistency_label_     = new QLabel("GNSS Pos: —");
+  nis_vel_consistency_label_     = new QLabel("GNSS Vel: —");
+  nis_heading_consistency_label_ = new QLabel("Heading:  —");
+  for (auto* lbl : {nis_pos_consistency_label_, nis_vel_consistency_label_,
+                    nis_heading_consistency_label_}) {
+    lbl->setStyleSheet("color:#ecf0f1; font-size:12px;");
+    cons_layout->addWidget(lbl);
+  }
+  left->addWidget(cons_box);
   left->addStretch();
 
   // ---- Right: NIS charts + residual charts --------------------------------
@@ -171,6 +189,23 @@ void FusionQualityTab::Refresh(const BridgeData& d)
     pos_reason_label_->setText(FormatReasonHist(d.kpi.gnss_pos_update));
     vel_reason_label_->setText(FormatReasonHist(d.kpi.gnss_vel_update));
     heading_reason_label_->setText(FormatReasonHist(d.kpi.heading_yaw_update));
+
+    // NIS χ² consistency = 1 - violation_rate
+    const auto fmt_cons = [](double violation_rate) {
+      const double pct = (1.0 - violation_rate) * 100.0;
+      const QString color = pct >= 90.0 ? "#27ae60" : (pct >= 70.0 ? "#f39c12" : "#e74c3c");
+      return QString("<span style='color:%1'>%2%</span>").arg(color).arg(pct, 0, 'f', 1);
+    };
+    nis_pos_consistency_label_->setText(
+        QString("GNSS Pos: %1").arg(fmt_cons(d.kpi.gnss_pos_nis_violation_rate)));
+    nis_vel_consistency_label_->setText(
+        QString("GNSS Vel: %1").arg(fmt_cons(d.kpi.gnss_vel_nis_violation_rate)));
+    nis_heading_consistency_label_->setText(
+        QString("Heading:  %1").arg(fmt_cons(d.kpi.heading_nis_violation_rate)));
+    for (auto* lbl : {nis_pos_consistency_label_, nis_vel_consistency_label_,
+                      nis_heading_consistency_label_}) {
+      lbl->setTextFormat(Qt::RichText);
+    }
   }
 
   // NIS time series

@@ -37,6 +37,11 @@ class FusionQualityTab : public QWidget {
   QLabel* vel_reason_label_    = nullptr;
   QLabel* heading_reason_label_ = nullptr;
 
+  // NIS χ² consistency score (fraction within gate)
+  QLabel* nis_pos_consistency_label_     = nullptr;
+  QLabel* nis_vel_consistency_label_     = nullptr;
+  QLabel* nis_heading_consistency_label_ = nullptr;
+
   // NIS series (value + gate line)
   QLineSeries* nis_pos_series_     = nullptr;
   QLineSeries* nis_vel_series_     = nullptr;

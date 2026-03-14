@@ -1,5 +1,6 @@
 #include "hybrid_localization_evaluation_tool/ui/events_inspector_tab.hpp"
 
+#include <QComboBox>
 #include <QFont>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -44,8 +45,35 @@ EventsInspectorTab::EventsInspectorTab(const std::shared_ptr<RosQtBridge>& bridg
   ev_title->setStyleSheet("color:#a3b1c6; font-weight:bold; font-size:12px;");
   event_count_ = new QLabel("0 events");
   event_count_->setStyleSheet("color:#8a93a3; font-size:11px;");
+
+  // Severity filter
+  sev_filter_ = new QComboBox();
+  sev_filter_->addItem("All Severities");
+  sev_filter_->addItem("INFO");
+  sev_filter_->addItem("WARN");
+  sev_filter_->addItem("ERROR");
+  sev_filter_->setStyleSheet(
+      "QComboBox{background:#141a22; color:#ecf0f1; border:1px solid #2c3e50;"
+      " border-radius:4px; padding:3px 6px;}"
+      "QComboBox::drop-down{border:none;}"
+      "QComboBox QAbstractItemView{background:#141a22; color:#ecf0f1;}");
+
+  // Alert type filter
+  type_filter_ = new QComboBox();
+  type_filter_->addItem("All Types");
+  type_filter_->addItem("NIS_GATE_VIOLATION");
+  type_filter_->addItem("SENSOR_DELAY");
+  type_filter_->addItem("COVARIANCE");
+  type_filter_->addItem("SENSOR_DROPOUT");
+  type_filter_->addItem("STATE_CHANGE");
+  type_filter_->addItem("OUTPUT_AVAILABILITY");
+  type_filter_->setStyleSheet(sev_filter_->styleSheet());
+  type_filter_->setMinimumWidth(180);
+
   ev_header->addWidget(ev_title);
   ev_header->addStretch();
+  ev_header->addWidget(sev_filter_);
+  ev_header->addWidget(type_filter_);
   ev_header->addWidget(event_count_);
 
   event_table_ = new QTableWidget(0, 5);
@@ -106,45 +134,17 @@ EventsInspectorTab::EventsInspectorTab(const std::shared_ptr<RosQtBridge>& bridg
   setLayout(root);
 
   connect(diag_filter_, &QLineEdit::textChanged, this, &EventsInspectorTab::ApplyDiagFilter);
+  connect(sev_filter_,  QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int) { ApplyEventFilter(); });
+  connect(type_filter_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int) { ApplyEventFilter(); });
 }
 
 void EventsInspectorTab::Refresh(const BridgeData& d)
 {
   // ---- Event log ---------------------------------------------------------
-  const auto& events = d.event_log;
-  event_count_->setText(QString("%1 events").arg(events.size()));
-
-  event_table_->setUpdatesEnabled(false);
-  event_table_->setSortingEnabled(false);
-  event_table_->setRowCount(0);
-  event_table_->setRowCount(static_cast<int>(events.size()));
-
-  for (int i = 0; i < static_cast<int>(events.size()); ++i) {
-    const auto& ev = events[static_cast<size_t>(i)];
-    const QString sev_str  = QString::fromUtf8(AlertSeverityStr(ev.severity));
-    const QString type_str = QString::fromUtf8(AlertTypeStr(ev.type));
-    const QString color    = SevColor(ev.severity);
-
-    auto* stamp_item = new QTableWidgetItem(
-        QString::number(ev.stamp.seconds(), 'f', 3));
-    auto* sev_item   = new QTableWidgetItem(sev_str);
-    sev_item->setForeground(QBrush(QColor(color)));
-    auto* type_item  = new QTableWidgetItem(type_str);
-    auto* msg_item   = new QTableWidgetItem(QString::fromStdString(ev.message));
-    auto* val_item   = new QTableWidgetItem(QString::number(ev.value, 'g', 4));
-
-    for (auto* item : {stamp_item, sev_item, type_item, msg_item, val_item}) {
-      item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
-    }
-    event_table_->setItem(i, 0, stamp_item);
-    event_table_->setItem(i, 1, sev_item);
-    event_table_->setItem(i, 2, type_item);
-    event_table_->setItem(i, 3, msg_item);
-    event_table_->setItem(i, 4, val_item);
-  }
-
-  event_table_->setSortingEnabled(true);
-  event_table_->setUpdatesEnabled(true);
+  event_cache_ = d.event_log;
+  ApplyEventFilter();
 
   // ---- Raw diagnostics ---------------------------------------------------
   if (d.has_sample) {
@@ -157,6 +157,53 @@ void EventsInspectorTab::Refresh(const BridgeData& d)
               [](const auto& a, const auto& b) { return a.first < b.first; });
     ApplyDiagFilter(diag_filter_->text());
   }
+}
+
+void EventsInspectorTab::ApplyEventFilter()
+{
+  const QString sev_filter  = sev_filter_->currentIndex() == 0
+                                  ? QString{}
+                                  : sev_filter_->currentText();
+  const QString type_filter = type_filter_->currentIndex() == 0
+                                  ? QString{}
+                                  : type_filter_->currentText();
+
+  event_table_->setUpdatesEnabled(false);
+  event_table_->setSortingEnabled(false);
+  event_table_->setRowCount(0);
+
+  int shown = 0;
+  for (const auto& ev : event_cache_) {
+    const QString sev_str  = QString::fromUtf8(AlertSeverityStr(ev.severity));
+    const QString type_str = QString::fromUtf8(AlertTypeStr(ev.type));
+
+    if (!sev_filter.isEmpty()  && sev_str  != sev_filter)  continue;
+    if (!type_filter.isEmpty() && !type_str.contains(type_filter, Qt::CaseInsensitive)) continue;
+
+    const int row = event_table_->rowCount();
+    event_table_->insertRow(row);
+    const QString color = SevColor(ev.severity);
+
+    auto* stamp_item = new QTableWidgetItem(QString::number(ev.stamp.seconds(), 'f', 3));
+    auto* sev_item   = new QTableWidgetItem(sev_str);
+    sev_item->setForeground(QBrush(QColor(color)));
+    auto* type_item  = new QTableWidgetItem(type_str);
+    auto* msg_item   = new QTableWidgetItem(QString::fromStdString(ev.message));
+    auto* val_item   = new QTableWidgetItem(QString::number(ev.value, 'g', 4));
+    for (auto* item : {stamp_item, sev_item, type_item, msg_item, val_item}) {
+      item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+    }
+    event_table_->setItem(row, 0, stamp_item);
+    event_table_->setItem(row, 1, sev_item);
+    event_table_->setItem(row, 2, type_item);
+    event_table_->setItem(row, 3, msg_item);
+    event_table_->setItem(row, 4, val_item);
+    ++shown;
+  }
+
+  event_table_->setSortingEnabled(true);
+  event_table_->setUpdatesEnabled(true);
+  event_count_->setText(QString("%1 / %2 events").arg(shown).arg(event_cache_.size()));
 }
 
 void EventsInspectorTab::ApplyDiagFilter(const QString& text)

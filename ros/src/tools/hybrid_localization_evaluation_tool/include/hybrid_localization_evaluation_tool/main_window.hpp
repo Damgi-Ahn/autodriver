@@ -6,6 +6,7 @@
 #include "hybrid_localization_evaluation_tool/ui/events_inspector_tab.hpp"
 #include "hybrid_localization_evaluation_tool/ui/export_session_tab.hpp"
 #include "hybrid_localization_evaluation_tool/ui/fusion_quality_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/ground_truth_error_tab.hpp"
 #include "hybrid_localization_evaluation_tool/ui/overview_tab.hpp"
 #include "hybrid_localization_evaluation_tool/ui/pose_trajectory_tab.hpp"
 #include "hybrid_localization_evaluation_tool/ui/sensor_timing_tab.hpp"
@@ -41,13 +42,14 @@ class EvaluationMainWindow : public QMainWindow {
 
   QTabWidget* tabs_ = nullptr;
 
-  OverviewTab*         tab_overview_    = nullptr;
-  FusionQualityTab*    tab_fusion_      = nullptr;
-  CovarianceNoiseTab*  tab_covariance_  = nullptr;
-  SensorTimingTab*     tab_timing_      = nullptr;
-  PoseTrajectoryTab*   tab_trajectory_  = nullptr;
-  EventsInspectorTab*  tab_events_      = nullptr;
-  ExportSessionTab*    tab_export_      = nullptr;
+  OverviewTab*           tab_overview_    = nullptr;
+  FusionQualityTab*      tab_fusion_      = nullptr;
+  GroundTruthErrorTab*   tab_gt_error_    = nullptr;
+  CovarianceNoiseTab*    tab_covariance_  = nullptr;
+  SensorTimingTab*       tab_timing_      = nullptr;
+  PoseTrajectoryTab*     tab_trajectory_  = nullptr;
+  EventsInspectorTab*    tab_events_      = nullptr;
+  ExportSessionTab*      tab_export_      = nullptr;
 
   // Status bar widgets
   QLabel* hz_label_  = nullptr;

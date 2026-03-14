@@ -1,4 +1,5 @@
 #include "hybrid_localization_evaluation_tool/ui/overview_tab.hpp"
+#include "hybrid_localization_evaluation_tool/health_state_engine.hpp"
 
 #include <QFont>
 #include <QFrame>
@@ -84,6 +85,15 @@ OverviewTab::OverviewTab(const std::shared_ptr<RosQtBridge>& bridge, QWidget* pa
   banner_label_->setFixedHeight(48);
   root->addWidget(banner_label_);
 
+  // ---- Health state row ----------------------------------------------------
+  health_state_label_ = new QLabel("● HEALTH: OK");
+  health_state_label_->setAlignment(Qt::AlignCenter);
+  health_state_label_->setFont(QFont("Noto Sans", 13, QFont::Bold));
+  health_state_label_->setStyleSheet("background:#1a3020; padding:6px; border-radius:4px;"
+                                     " color:#27ae60; border:1px solid #27ae60;");
+  health_state_label_->setFixedHeight(40);
+  root->addWidget(health_state_label_);
+
   // ---- Sub-status row ------------------------------------------------------
   auto* sub_row = new QHBoxLayout();
   state_label_      = MakeCardLabel("State: —");
@@ -139,6 +149,17 @@ OverviewTab::OverviewTab(const std::shared_ptr<RosQtBridge>& bridge, QWidget* pa
 
 void OverviewTab::Refresh(const BridgeData& d)
 {
+  // ---- Health state machine output -----------------------------------------
+  {
+    const char* color = HealthStateColor(d.health_state);
+    const char* text  = HealthStateStr(d.health_state);
+    health_state_label_->setText(QString("● HEALTH: %1").arg(text));
+    health_state_label_->setStyleSheet(
+        QString("background:%1; padding:6px; border-radius:4px;"
+                " color:#ffffff; border:1px solid %1; font-size:13px; font-weight:bold;")
+            .arg(color));
+  }
+
   // ---- Banner & state ------------------------------------------------------
   if (d.has_sample) {
     const uint8_t lvl = d.sample.diag_level;

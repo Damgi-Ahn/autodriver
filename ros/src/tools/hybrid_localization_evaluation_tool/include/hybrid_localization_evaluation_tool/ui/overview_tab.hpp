@@ -25,6 +25,7 @@ class OverviewTab : public QWidget {
 
   // Status banner
   QLabel* banner_label_         = nullptr;
+  QLabel* health_state_label_   = nullptr;  // OK/DEGRADED/FAILURE/RECOVERING
   QLabel* state_label_          = nullptr;
   QLabel* activation_label_     = nullptr;
   QLabel* eskf_init_label_      = nullptr;

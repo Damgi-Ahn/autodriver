@@ -103,6 +103,11 @@ EvaluationNode::EvaluationNode(const rclcpp::NodeOptions& options)
       "/localization/fgo/keyframe_path", rclcpp::QoS{10},
       [this](nav_msgs::msg::Path::SharedPtr msg) { OnKeyframePath(std::move(msg)); });
 
+  // /localization/kinematic_state_gnss → ground truth (RTK GNSS accuracy)
+  gt_sub_ = create_subscription<nav_msgs::msg::Odometry>(
+      "/localization/kinematic_state_gnss", rclcpp::QoS{10},
+      [this](nav_msgs::msg::Odometry::SharedPtr msg) { OnGroundTruth(std::move(msg)); });
+
   // KPI timer: 1 Hz aggregation
   kpi_timer_ = create_wall_timer(
       std::chrono::seconds(1), [this]() { OnKpiTimer(); });
@@ -161,6 +166,7 @@ void EvaluationNode::OnEskfOdom(const nav_msgs::msg::Odometry::SharedPtr msg)
   const rclcpp::Time stamp = rclcpp::Time(msg->header.stamp);
   const auto pose = BuildPoseSnapshot(stamp, msg->pose.pose.position, msg->pose.pose.orientation);
   session_store_.AddEskfPoint(pose.x, pose.y);
+  gt_analyzer_.UpdateEskfPose(pose.x, pose.y, pose.yaw_rad);
   if (bridge_) bridge_->UpdateEskfPose(pose);
 }
 
@@ -169,7 +175,15 @@ void EvaluationNode::OnFgoPose(const geometry_msgs::msg::PoseStamped::SharedPtr 
   const rclcpp::Time stamp = rclcpp::Time(msg->header.stamp);
   const auto pose = BuildPoseSnapshot(stamp, msg->pose.position, msg->pose.orientation);
   session_store_.AddFgoPoint(pose.x, pose.y);
+  gt_analyzer_.UpdateFgoPose(pose.x, pose.y, pose.yaw_rad);
   if (bridge_) bridge_->UpdateFgoPose(pose);
+}
+
+void EvaluationNode::OnGroundTruth(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  const rclcpp::Time stamp = rclcpp::Time(msg->header.stamp);
+  const auto pose = BuildPoseSnapshot(stamp, msg->pose.pose.position, msg->pose.pose.orientation);
+  gt_analyzer_.AddGroundTruth(stamp, pose.x, pose.y, pose.yaw_rad);
 }
 
 void EvaluationNode::OnLocalizationState(const std_msgs::msg::String::SharedPtr msg)
@@ -197,9 +211,18 @@ void EvaluationNode::OnKpiTimer()
     if (exporter_.enabled()) exporter_.WriteEvents(avail_alerts);
   }
 
+  // Update health state machine
+  const bool eskf_init = [this]() {
+    DiagSample s;
+    return bridge_ && bridge_->GetLatestSample(&s) && s.eskf_initialized;
+  }();
+  const HealthState health = health_engine_.Update(snapshot, eskf_init);
+
   if (bridge_) {
     bridge_->UpdateKpi(snapshot);
     bridge_->UpdateTrajectories(session_store_);
+    bridge_->UpdateHealthState(health);
+    bridge_->UpdateGtData(gt_analyzer_);
   }
   if (exporter_.enabled()) exporter_.WriteKpiSnapshot(snapshot);
 }
