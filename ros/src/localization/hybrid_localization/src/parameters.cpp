@@ -53,6 +53,24 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     node.declare_parameter(
     "heading.rate_gate_bypass_yaw_var_scale",
     heading.rate_gate_bypass_yaw_var_scale);
+  heading.rate_gate_init_grace_sec =
+    node.declare_parameter(
+    "heading.rate_gate_init_grace_sec",
+    heading.rate_gate_init_grace_sec);
+  heading.event_inflate_invalid =
+    node.declare_parameter("heading.event_inflate_invalid", heading.event_inflate_invalid);
+  heading.event_inflate_timeout =
+    node.declare_parameter("heading.event_inflate_timeout", heading.event_inflate_timeout);
+  heading.event_inflate_rate_gate =
+    node.declare_parameter(
+    "heading.event_inflate_rate_gate",
+    heading.event_inflate_rate_gate);
+  heading.event_inflate_default =
+    node.declare_parameter("heading.event_inflate_default", heading.event_inflate_default);
+  heading.recover_peak_min_inflate =
+    node.declare_parameter(
+    "heading.recover_peak_min_inflate",
+    heading.recover_peak_min_inflate);
 
   heading_arbitrator.gphdt_recover_holdoff_sec =
     node.declare_parameter(
@@ -178,6 +196,8 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     "gnss.min_status_for_pos_update", gnss.min_status_for_pos_update);
   gnss.min_status_for_yaw_update = node.declare_parameter(
     "heading.min_gnss_status_for_yaw_update", gnss.min_status_for_yaw_update);
+  gnss.heading_neg_status_inflate = node.declare_parameter(
+    "gnss.heading_neg_status_inflate", gnss.heading_neg_status_inflate);
   gnss.vel_inflate_status_fix = node.declare_parameter(
     "gnss.vel_inflate_status_fix", gnss.vel_inflate_status_fix);
   gnss.vel_inflate_status_sbas = node.declare_parameter(
@@ -194,6 +214,8 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
     "gnss.recover.pos_max_inflate", gnss.recover.pos_max_inflate);
   gnss.recover.vel_max_inflate = node.declare_parameter(
     "gnss.recover.vel_max_inflate", gnss.recover.vel_max_inflate);
+  gnss.recover.decay_exponent = node.declare_parameter(
+    "gnss.recover.decay_exponent", gnss.recover.decay_exponent);
 
   // Optional GNSS pose output for pose_initializer compatibility
   gnss.publish_pose_with_covariance = node.declare_parameter(
@@ -322,6 +344,21 @@ void HybridLocalizationNodeParams::load(rclcpp::Node & node)
   // 상태 머신: GNSS 불량 → DEGRADED 전이 타임아웃
   gnss_degraded_timeout_sec = node.declare_parameter(
     "state.gnss_degraded_timeout_sec", gnss_degraded_timeout_sec);
+
+  imu_calibration_duration_sec = node.declare_parameter(
+    "imu_calibration_duration_sec", imu_calibration_duration_sec);
+  diag_publish_divider = node.declare_parameter(
+    "diag_publish_divider", diag_publish_divider);
+
+  // FGO 백엔드: ISAM2 파라미터
+  fgo_backend.isam2_relinearize_threshold = node.declare_parameter(
+    "fgo.backend.isam2_relinearize_threshold", fgo_backend.isam2_relinearize_threshold);
+  fgo_backend.isam2_relinearize_skip = node.declare_parameter(
+    "fgo.backend.isam2_relinearize_skip", fgo_backend.isam2_relinearize_skip);
+  fgo_backend.isam2_integration_cov = node.declare_parameter(
+    "fgo.backend.isam2_integration_cov", fgo_backend.isam2_integration_cov);
+  fgo_backend.isam2_bias_acc_omega_int = node.declare_parameter(
+    "fgo.backend.isam2_bias_acc_omega_int", fgo_backend.isam2_bias_acc_omega_int);
 }
 
 } // namespace hybrid_localization

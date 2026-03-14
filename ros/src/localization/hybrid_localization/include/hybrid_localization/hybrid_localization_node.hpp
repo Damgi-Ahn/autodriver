@@ -154,7 +154,6 @@ private:
   GnssHeadingArbitrator heading_arbitrator_;
   ImuPreprocessor imu_preprocessor_;
   ImuCalibrationManager imu_calibration_manager_;
-  static constexpr double IMU_CALIBRATION_DURATION_SEC = 30.0;
 
   // ---- Counters & timestamps ----------------------------------------------
   std::atomic<size_t> imu_count_{0};
@@ -183,7 +182,6 @@ private:
   std::atomic<bool> heading_received_{false};
 
   rclcpp::Time eskf_init_stamp_{0, 0, RCL_ROS_TIME};
-  static constexpr double k_heading_rate_gate_init_grace_sec_{5.0};
   int heading_rate_gate_skip_count_{0};
   rclcpp::Time heading_rate_gate_skip_window_start_{0, 0, RCL_ROS_TIME};
 
