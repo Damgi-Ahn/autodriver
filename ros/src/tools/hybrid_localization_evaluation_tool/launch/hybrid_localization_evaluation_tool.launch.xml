@@ -1,19 +1,60 @@
 <launch>
-  <arg name="window_sec" default="10.0"/>
+  <!-- General -->
+  <arg name="window_sec"              default="10.0"/>
   <arg name="expected_output_rate_hz" default="50.0"/>
-  <arg name="csv_output_dir" default=""/>
-  <arg name="diagnostics_topic" default="/diagnostics"/>
-  <arg name="output_odom_topic" default="/localization/kinematic_state"/>
+  <arg name="csv_output_dir"          default=""/>
+
+  <!-- NIS gates (should match hybrid_localization params) -->
+  <arg name="nis_gate_gnss_pos"  default="11.34"/>
+  <arg name="nis_gate_gnss_vel"  default="11.34"/>
+  <arg name="nis_gate_heading"   default="6.63"/>
+
+  <!-- Alert thresholds -->
+  <arg name="alert_delay_warn_ms"          default="200.0"/>
+  <arg name="alert_delay_error_ms"         default="500.0"/>
+  <arg name="alert_P_trace_warn"           default="100.0"/>
+  <arg name="alert_P_trace_error"          default="1000.0"/>
+  <arg name="alert_imu_dt_jitter_warn_ms"  default="2.0"/>
+  <arg name="alert_imu_dt_jitter_error_ms" default="5.0"/>
+  <arg name="alert_output_avail_warn"      default="0.90"/>
+  <arg name="alert_output_avail_error"     default="0.70"/>
+
+  <!-- Topic remaps -->
+  <arg name="diagnostics_topic"       default="/diagnostics"/>
+  <arg name="output_odom_topic"       default="/localization/kinematic_state"/>
+  <arg name="gnss_pose_topic"         default="/localization/gnss/pose_with_covariance"/>
+  <arg name="eskf_odom_topic"         default="/localization/eskf/odom"/>
+  <arg name="fgo_pose_topic"          default="/localization/fgo/pose"/>
+  <arg name="localization_state_topic" default="/localization/state"/>
+  <arg name="keyframe_path_topic"     default="/localization/fgo/keyframe_path"/>
 
   <node pkg="hybrid_localization_evaluation_tool"
         exec="hybrid_localization_evaluation_tool"
         name="hybrid_localization_evaluation_tool"
         output="screen">
-    <param name="window_sec" value="$(var window_sec)"/>
+    <param name="window_sec"              value="$(var window_sec)"/>
     <param name="expected_output_rate_hz" value="$(var expected_output_rate_hz)"/>
-    <param name="csv_output_dir" value="$(var csv_output_dir)"/>
+    <param name="csv_output_dir"          value="$(var csv_output_dir)"/>
 
-    <remap from="/diagnostics" to="$(var diagnostics_topic)"/>
+    <param name="nis_gate_gnss_pos"  value="$(var nis_gate_gnss_pos)"/>
+    <param name="nis_gate_gnss_vel"  value="$(var nis_gate_gnss_vel)"/>
+    <param name="nis_gate_heading"   value="$(var nis_gate_heading)"/>
+
+    <param name="alert_delay_warn_ms"          value="$(var alert_delay_warn_ms)"/>
+    <param name="alert_delay_error_ms"         value="$(var alert_delay_error_ms)"/>
+    <param name="alert_P_trace_warn"           value="$(var alert_P_trace_warn)"/>
+    <param name="alert_P_trace_error"          value="$(var alert_P_trace_error)"/>
+    <param name="alert_imu_dt_jitter_warn_ms"  value="$(var alert_imu_dt_jitter_warn_ms)"/>
+    <param name="alert_imu_dt_jitter_error_ms" value="$(var alert_imu_dt_jitter_error_ms)"/>
+    <param name="alert_output_avail_warn"      value="$(var alert_output_avail_warn)"/>
+    <param name="alert_output_avail_error"     value="$(var alert_output_avail_error)"/>
+
+    <remap from="/diagnostics"                  to="$(var diagnostics_topic)"/>
     <remap from="/localization/kinematic_state" to="$(var output_odom_topic)"/>
+    <remap from="/localization/gnss/pose_with_covariance" to="$(var gnss_pose_topic)"/>
+    <remap from="/localization/eskf/odom"       to="$(var eskf_odom_topic)"/>
+    <remap from="/localization/fgo/pose"        to="$(var fgo_pose_topic)"/>
+    <remap from="/localization/state"           to="$(var localization_state_topic)"/>
+    <remap from="/localization/fgo/keyframe_path" to="$(var keyframe_path_topic)"/>
   </node>
 </launch>

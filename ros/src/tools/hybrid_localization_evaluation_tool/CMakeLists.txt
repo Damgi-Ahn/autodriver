@@ -15,11 +15,28 @@ add_library(hybrid_localization_evaluation_tool_lib STATIC
   src/diagnostic_parser.cpp
   src/evaluation_node.cpp
   src/kpi_engine.cpp
-  src/main_window.cpp
+  src/alert_engine.cpp
+  src/session_store.cpp
   src/ros_qt_bridge.cpp
   src/storage_exporter.cpp
+  src/main_window.cpp
+  src/ui/overview_tab.cpp
+  src/ui/fusion_quality_tab.cpp
+  src/ui/covariance_noise_tab.cpp
+  src/ui/sensor_timing_tab.cpp
+  src/ui/pose_trajectory_tab.cpp
+  src/ui/events_inspector_tab.cpp
+  src/ui/export_session_tab.cpp
+  include/hybrid_localization_evaluation_tool/ui/overview_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/fusion_quality_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/covariance_noise_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/sensor_timing_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/pose_trajectory_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/events_inspector_tab.hpp
+  include/hybrid_localization_evaluation_tool/ui/export_session_tab.hpp
 )
 autodriver_set_compiler_options(hybrid_localization_evaluation_tool_lib)
+set_target_properties(hybrid_localization_evaluation_tool_lib PROPERTIES AUTOMOC ON)
 
 target_include_directories(hybrid_localization_evaluation_tool_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -36,6 +53,7 @@ ament_target_dependencies(hybrid_localization_evaluation_tool_lib PUBLIC
   diagnostic_msgs
   nav_msgs
   geometry_msgs
+  std_msgs
 )
 
 # ---------------------------------------------------------------------------
@@ -45,6 +63,7 @@ add_executable(hybrid_localization_evaluation_tool
   src/main.cpp
 )
 autodriver_set_compiler_options(hybrid_localization_evaluation_tool)
+set_target_properties(hybrid_localization_evaluation_tool PROPERTIES AUTOMOC ON)
 target_link_libraries(hybrid_localization_evaluation_tool PRIVATE
   hybrid_localization_evaluation_tool_lib
 )

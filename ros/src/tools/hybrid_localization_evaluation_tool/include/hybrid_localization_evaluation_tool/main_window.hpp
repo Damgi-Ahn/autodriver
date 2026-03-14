@@ -1,18 +1,22 @@
 #pragma once
 
-#include "hybrid_localization_evaluation_tool/diagnostic_parser.hpp"
-#include "hybrid_localization_evaluation_tool/kpi_engine.hpp"
 #include "hybrid_localization_evaluation_tool/ros_qt_bridge.hpp"
+#include "hybrid_localization_evaluation_tool/storage_exporter.hpp"
+#include "hybrid_localization_evaluation_tool/ui/covariance_noise_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/events_inspector_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/export_session_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/fusion_quality_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/overview_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/pose_trajectory_tab.hpp"
+#include "hybrid_localization_evaluation_tool/ui/sensor_timing_tab.hpp"
 
 #include <QLabel>
 #include <QMainWindow>
 #include <QElapsedTimer>
+#include <QTabWidget>
 #include <QTimer>
-#include <QPlainTextEdit>
 
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-
+#include <functional>
 #include <memory>
 
 namespace autodriver::tools {
@@ -20,51 +24,39 @@ namespace autodriver::tools {
 class EvaluationMainWindow : public QMainWindow {
  public:
   explicit EvaluationMainWindow(const std::shared_ptr<RosQtBridge>& bridge,
+                                StorageExporter* exporter = nullptr,
                                 QWidget* parent = nullptr);
+
+  // Propagate NIS gate values to the fusion quality tab
+  void SetNisGates(double pos, double vel, double heading);
+
+  // Callbacks forwarded to export tab
+  void SetOnFlushSessionSummary(std::function<void()> cb);
+  void SetOnClearSession(std::function<void()> cb);
 
  private:
   void UpdateUi();
-  static QString FormatStat(const StatSummary& stat, const QString& unit);
-  static QString FormatUpdateRate(const UpdateRateSummary& summary);
-  static QString FormatReasonHist(const UpdateRateSummary& summary);
 
   std::shared_ptr<RosQtBridge> bridge_;
 
-  QLabel* status_label_ = nullptr;
-  QLabel* kpi_label_ = nullptr;
-  QLabel* nis_label_ = nullptr;
-  QLabel* delay_label_ = nullptr;
-  QLabel* reason_label_ = nullptr;
-  QLabel* timestamp_label_ = nullptr;
-  QLabel* nis_pos_card_ = nullptr;
-  QLabel* nis_vel_card_ = nullptr;
-  QLabel* nis_heading_card_ = nullptr;
-  QLabel* hz_label_ = nullptr;
+  QTabWidget* tabs_ = nullptr;
+
+  OverviewTab*         tab_overview_    = nullptr;
+  FusionQualityTab*    tab_fusion_      = nullptr;
+  CovarianceNoiseTab*  tab_covariance_  = nullptr;
+  SensorTimingTab*     tab_timing_      = nullptr;
+  PoseTrajectoryTab*   tab_trajectory_  = nullptr;
+  EventsInspectorTab*  tab_events_      = nullptr;
+  ExportSessionTab*    tab_export_      = nullptr;
+
+  // Status bar widgets
+  QLabel* hz_label_  = nullptr;
   QLabel* cpu_label_ = nullptr;
-  QPlainTextEdit* diag_dump_ = nullptr;
-  QLabel* gnss_pose_card_ = nullptr;
-  QLabel* eskf_pose_card_ = nullptr;
-  QLabel* fgo_pose_card_ = nullptr;
 
-  QLineSeries* nis_pos_series_ = nullptr;
-  QLineSeries* nis_vel_series_ = nullptr;
-  QLineSeries* nis_heading_series_ = nullptr;
-  QLineSeries* delay_gnss_series_ = nullptr;
-  QLineSeries* delay_gnss_vel_series_ = nullptr;
-  QLineSeries* delay_vehicle_series_ = nullptr;
-  QLineSeries* delay_steer_series_ = nullptr;
-  QChartView* nis_pos_chart_view_ = nullptr;
-  QChartView* nis_vel_chart_view_ = nullptr;
-  QChartView* nis_heading_chart_view_ = nullptr;
-  QChartView* delay_gnss_chart_view_ = nullptr;
-  QChartView* delay_gnss_vel_chart_view_ = nullptr;
-  QChartView* delay_vehicle_chart_view_ = nullptr;
-  QChartView* delay_steer_chart_view_ = nullptr;
-
-  QTimer* timer_ = nullptr;
+  QTimer*       timer_ = nullptr;
   QElapsedTimer cpu_timer_;
-  double last_cpu_seconds_ = 0.0;
-  int cpu_cores_ = 1;
+  double        last_cpu_seconds_ = 0.0;
+  int           cpu_cores_        = 1;
 };
 
 }  // namespace autodriver::tools

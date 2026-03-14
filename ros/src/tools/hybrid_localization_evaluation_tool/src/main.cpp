@@ -17,7 +17,8 @@ int main(int argc, char* argv[])
   auto node = std::make_shared<autodriver::tools::EvaluationNode>();
   node->SetBridge(bridge);
 
-  autodriver::tools::EvaluationMainWindow window(bridge);
+  autodriver::tools::EvaluationMainWindow window(bridge, node->GetExporter());
+  window.SetNisGates(node->nis_gate_pos(), node->nis_gate_vel(), node->nis_gate_heading());
   window.show();
 
   rclcpp::executors::MultiThreadedExecutor executor;

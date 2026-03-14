@@ -16,6 +16,7 @@
   <depend>autodriver_cmake</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
 
   <build_depend>qt6-base-dev</build_depend>
   <build_depend>qt6-charts-dev</build_depend>
